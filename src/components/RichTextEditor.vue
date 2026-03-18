@@ -82,6 +82,7 @@
 import { ref, shallowRef, onBeforeUnmount } from 'vue'
 import '@wangeditor/editor/dist/css/style.css'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
+import request from '../utils/request'
 import {
   ElCard,
   ElButton,
@@ -146,14 +147,17 @@ const submitParams = ref({})
 // 工具栏配置
 const toolbarConfig = {
   excludeKeys: [
-    'group-image', // 排除图片组（包含上传图片、网络图片等）
-    'insertImage', 
-    'uploadImage',
-    // 排除视频
-    'group-video',
-    'insertVideo',
-    'uploadVideo'
-  ]
+    'insertLink',  // 排除“插入链接”按钮
+    'insertImage', // 排除包含网络图片的原始“图片”菜单
+    'group-video', // 排除视频组
+  ],
+  insertKeys: {
+    index: 22, // 在原位置插入
+    keys: [
+      // 使用对象配置，showText: true 是编辑器官方支持的配置，用于强制显示文字
+      { key: 'uploadImage', showText: true } 
+    ]
+  }
 }
 
 // 切换全屏（触发内置的全屏按钮）
@@ -182,57 +186,31 @@ const toggleFullScreen = () => {
 const editorConfig = {
   placeholder: '请输入内容...',
   MENU_CONF: {
-    // 上传图片配置 - 实际开发中需要配置真实的上传接口
-    // uploadImage: {
-    //   // 上传接口地址（根据实际后端接口修改）
-    //   server: '/api/upload/image',
-    //   // 上传文件的字段名
-    //   fieldName: 'file',
-    //   // 允许上传的图片类型
-    //   allowedFileTypes: ['image/*'],
-    //   // 单个文件的最大体积限制，默认为 2M
-    //   maxFileSize: 2 * 1024 * 1024,
-    //   // 最多可上传几个文件，默认为 100
-    //   maxNumberOfFiles: 10,
-    //   // 自定义上传参数，例如传递token等
-    //   meta: {
-    //     token: 'xxx', // 实际开发中从store或localStorage获取
-    //     otherKey: 'otherValue'
-    //   },
-    //   // 自定义 header，例如传递token
-    //   headers: {
-    //     Accept: 'text/x-json',
-    //     otherKey: 'otherValue'
-    //   },
-    //   // 上传成功后的回调
-    //   onSuccess(file, res) {
-    //     console.log('图片上传成功', file, res)
-    //     // 实际开发中，后端返回格式可能是：
-    //     // { code: 200, data: { url: 'https://xxx.com/image.jpg' }, message: 'success' }
-    //     // 需要根据实际后端返回格式处理
-    //   },
-    //   // 上传失败后的回调
-    //   onFailed(file, res) {
-    //     console.error('图片上传失败', file, res)
-    //     ElMessage.error('图片上传失败，请重试')
-    //   },
-    //   // 上传错误后的回调
-    //   onError(file, err, res) {
-    //     console.error('图片上传错误', file, err, res)
-    //     ElMessage.error('图片上传出错：' + err.message)
-    //   },
-    //   // 自定义插入图片的格式（根据后端返回格式调整）
-    //   customInsert(res, insertFn) {
-    //     // res 即服务端的返回结果
-    //     // 从 res 中找到 url alt href ，然后插入图片
-    //     // 实际开发中，根据后端返回的数据结构来解析
-    //     // 例如：res.data.url 或 res.url
-    //     const url = res.data?.url || res.url
-    //     const alt = res.data?.alt || res.alt || ''
-    //     const href = res.data?.href || res.href || ''
-    //     insertFn(url, alt, href)
-    //   }
-    // }
+    // 上传图片配置
+    uploadImage: {
+      // 自定义上传：将图片转为 Base64 插入，不再调用后端上传接口
+      async customUpload(file, insertFn) {
+        const reader = new FileReader()
+        reader.readAsDataURL(file)
+        reader.onload = () => {
+          const base64 = reader.result
+          // 直接插入 Base64 字符串
+          // 参数：url (这里是 base64), alt, href
+          insertFn(base64, file.name, base64)
+          ElMessage.success('图片已转为 Base64 插入')
+        }
+        reader.onerror = (error) => {
+          console.error('图片转 Base64 失败:', error)
+          ElMessage.error('图片处理失败')
+        }
+      },
+      // 允许上传的图片类型
+      allowedFileTypes: ['image/*'],
+      // 单个文件的最大体积限制，注意 Base64 会变大，建议不要设置过大以免页面卡顿
+      maxFileSize: 2 * 1024 * 1024,
+    },
+    // 如果需要上传视频，建议还是走后端，Base64 视频体积太大
+    // uploadVideo: { ... }
   }
 }
 

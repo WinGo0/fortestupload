@@ -1,85 +1,101 @@
 import axios from 'axios'
+import { ElMessage, ElLoading } from 'element-plus'
 
 // ============================================================
-// 1. 创建 axios 实例
+// 1. 全局配置与状态管理
+// ============================================================
+const pendingMap = new Map() // 用于存储每个请求的 AbortController
+let loadingInstance = null
+let loadingCount = 0
+
+/**
+ * 开启全局 Loading
+ */
+function openLoading(config) {
+    if (config.showLoading && loadingCount === 0) {
+        loadingInstance = ElLoading.service({
+            lock: true,
+            text: '加载中...',
+            background: 'rgba(0, 0, 0, 0.7)',
+        })
+    }
+    if (config.showLoading) loadingCount++
+}
+
+/**
+ * 关闭全局 Loading
+ */
+function closeLoading(config) {
+    if (config.showLoading && loadingCount > 0) {
+        loadingCount--
+    }
+    if (loadingCount === 0 && loadingInstance) {
+        loadingInstance.close()
+        loadingInstance = null
+    }
+}
+
+/**
+ * 生成唯一请求 Key
+ */
+function getRequestKey(config) {
+    const { method, url, params, data } = config
+    return [method, url, JSON.stringify(params), JSON.stringify(data)].join('&')
+}
+
+/**
+ * 移除并取消重复请求
+ */
+function removePending(config) {
+    const key = getRequestKey(config)
+    if (pendingMap.has(key)) {
+        const controller = pendingMap.get(key)
+        controller.abort() // 核心：真正取消网络请求
+        pendingMap.delete(key)
+    }
+}
+
+// ============================================================
+// 2. 实例创建
 // ============================================================
 const service = axios.create({
     baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-    timeout: 15000,
-    headers: {
-        'Content-Type': 'application/json',
-    },
+    timeout: 10000,
+    headers: { 'Content-Type': 'application/json' },
 })
-
-// ============================================================
-// 2. 请求去重（Cancel Duplicate Requests）
-//    - 同一个接口在前一次请求未完成时，再次发起相同请求会自动取消前一次
-//    - 通过 url + method + params/data 生成唯一 key
-//    - 可通过 config.cancelDuplicate = false 关闭（默认开启）
-// ============================================================
-const pendingMap = new Map()
-
-/**
- * 生成请求的唯一标识
- * @param {import('axios').InternalAxiosRequestConfig} config
- * @returns {string}
- */
-function generateRequestKey(config) {
-    const { url, method, params, data } = config
-    // 使用 JSON.stringify 时对 data 做安全处理
-    const dataStr = typeof data === 'string' ? data : JSON.stringify(data || {})
-    const paramsStr = JSON.stringify(params || {})
-    return `${method}:${url}:${paramsStr}:${dataStr}`
-}
-
-/**
- * 将请求添加到 pendingMap，如果已经存在则取消之前的请求
- */
-function addPending(config) {
-    const key = generateRequestKey(config)
-
-    // 如果已有相同请求正在进行，取消它
-    if (pendingMap.has(key)) {
-        const abortController = pendingMap.get(key)
-        abortController.abort('请求被取消：重复请求')
-        pendingMap.delete(key)
-    }
-
-    // 创建新的 AbortController
-    const controller = new AbortController()
-    config.signal = controller.signal
-    pendingMap.set(key, controller)
-}
-
-/**
- * 请求完成后从 pendingMap 中移除
- */
-function removePending(config) {
-    const key = generateRequestKey(config)
-    pendingMap.delete(key)
-}
 
 // ============================================================
 // 3. 请求拦截器
 // ============================================================
 service.interceptors.request.use(
     (config) => {
-        // 默认开启请求去重，可通过 cancelDuplicate: false 关闭
-        if (config.cancelDuplicate !== false) {
-            addPending(config)
+        // 默认配置（可在具体调用时覆盖）
+        const options = {
+            repeatCancel: true, // 是否开启重复请求取消
+            showLoading: false, // 是否开启全屏 Loading
+            ...config,
         }
 
-        // 这里可以添加 token
-        // const token = localStorage.getItem('token')
-        // if (token) {
-        //   config.headers.Authorization = `Bearer ${token}`
-        // }
+        // 1. 处理重复请求取消 (防抖的底层实现)
+        if (options.repeatCancel) {
+            removePending(options)
+            const controller = new AbortController()
+            options.signal = controller.signal
+            pendingMap.set(getRequestKey(options), controller)
+        }
 
-        return config
+        // 2. 处理 Loading
+        openLoading(options)
+
+        // 3. Token 注入
+        const token = localStorage.getItem('token')
+        if (token) {
+            options.headers.Authorization = `Bearer ${token}`
+        }
+
+        return options
     },
-    (error) => {
-        return Promise.reject(error)
-    }
+    (error) => Promise.reject(error)
 )
 
 // ============================================================
@@ -87,64 +103,83 @@ service.interceptors.request.use(
 // ============================================================
 service.interceptors.response.use(
     (response) => {
-        // 请求完成，从 pendingMap 中移除
-        removePending(response.config)
+        const { config } = response
+        removePending(config)
+        closeLoading(config)
 
-        // 根据业务约定处理返回值，按需调整
         const res = response.data
-        // 例如：如果后端约定 code !== 200 为异常
-        // if (res.code !== 200) {
-        //   ElMessage.error(res.message || '请求失败')
-        //   return Promise.reject(new Error(res.message || '请求失败'))
-        // }
-        return res
+
+        // 业务状态码处理（根据后端约定修改）
+        // 假设 200 或 0 是成功
+        if (res.code !== 200 && res.code !== 0 && res.code !== undefined) {
+            ElMessage.error(res.message || '系统开小差了')
+            return Promise.reject(new Error(res.message || 'Error'))
+        }
+
+        return res.data || res // 直接返回数据主体
     },
     (error) => {
-        // 请求失败也要从 pendingMap 中移除
+        // 清理状态
         if (error.config) {
             removePending(error.config)
+            closeLoading(error.config)
         }
 
-        // 被取消的请求不需要提示错误
+        // 如果是主动取消的请求，不弹框提示
         if (axios.isCancel(error)) {
-            console.log('请求被取消：', error.message)
-            return Promise.reject(error)
+            console.log('请求被自动去重取消:', error.message)
+            return new Promise(() => { }) // 返回一个永远 pending 的 promise，防止进入业务层的 catch
         }
 
-        // 处理 HTTP 错误状态码
-        const status = error.response?.status
-        const errorMessages = {
-            400: '请求参数错误',
-            401: '未授权，请重新登录',
-            403: '拒绝访问',
-            404: '请求地址不存在',
-            408: '请求超时',
-            500: '服务器内部错误',
-            502: '网关错误',
-            503: '服务不可用',
-            504: '网关超时',
+        // HTTP 异常状态码处理
+        let message = ''
+        if (error.response) {
+            switch (error.response.status) {
+                case 401:
+                    message = '登录过期，请重新登录'
+                    // 这里可以执行登出操作，如：useUserStore().logout()
+                    break
+                case 403: message = '拒绝访问'; break
+                case 404: message = '请求地址错误'; break
+                case 500: message = '服务器内部错误'; break
+                default: message = `系统异常 (${error.response.status})`
+            }
+        } else if (error.message.includes('timeout')) {
+            message = '网络请求超时'
+        } else {
+            message = '网络连接异常'
         }
-        const message = errorMessages[status] || `连接错误 ${status || ''}`
-        console.error(message)
 
-        // 可以集成 ElMessage 进行提示
-        // ElMessage.error(message)
-
+        ElMessage.error(message)
         return Promise.reject(error)
     }
 )
 
-// ============================================================
-// 5. 取消所有进行中的请求（用于路由切换等场景）
-// ============================================================
-export function cancelAllPending() {
-    pendingMap.forEach((controller) => {
-        controller.abort('路由切换，取消所有请求')
-    })
-    pendingMap.clear()
+/**
+ * 5. 常用请求方法封装
+ */
+const request = {
+    get(url, params, config = {}) {
+        return service.get(url, { params, ...config })
+    },
+    post(url, data, config = {}) {
+        return service.post(url, data, config)
+    },
+    put(url, data, config = {}) {
+        return service.put(url, data, config)
+    },
+    delete(url, config = {}) {
+        return service.delete(url, config)
+    },
+    // 专门用于文件上传
+    upload(url, file, config = {}) {
+        const formData = new FormData()
+        formData.append('file', file)
+        return service.post(url, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            ...config,
+        })
+    }
 }
 
-// ============================================================
-// 6. 导出封装好的请求方法
-// ============================================================
-export default service
+export default request

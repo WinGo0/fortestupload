@@ -14,19 +14,24 @@
     </div> -->
 
     <!-- 日期范围选择器演示 -->
-    <div class="chart-wrapper" style="height: auto;">
+    <!-- <div class="chart-wrapper" style="height: auto;">
       <DateRangeDemo />
-    </div>
+    </div> -->
 
     <!-- 按钮高度演示 -->
-    <div class="chart-wrapper" style="height: auto;">
+    <!-- <div class="chart-wrapper" style="height: auto;">
       <ButtonHeightDemo />
-    </div>
+    </div> -->
+
+    <!-- 防抖演示 (新版) -->
+    <!-- <div class="chart-wrapper" style="height: auto;">
+      <SearchDebounce />
+    </div> -->
 
     <!-- 文本省略演示 -->
-    <div class="chart-wrapper" style="height: auto;">
+    <!-- <div class="chart-wrapper" style="height: auto;">
       <TextEllipsisDemo />
-    </div>
+    </div> -->
 
     <!-- 富文本 -->
     <!-- <div class="chart-wrapper">
@@ -37,6 +42,11 @@
     <!-- <div class="chart-wrapper">
       <Detail />
     </div> -->
+
+    <!-- 搜索病例展示 -->
+    <div class="case-wrapper" style="flex: 1; width: 100%;">
+      <CaseSearch />
+    </div>
 
     <!-- <div class="chart-wrapper">
       <h3>Test Raw el-input-number with Precision 8</h3>
@@ -57,6 +67,8 @@ import Detail from './components/Detail.vue';
 import TextEllipsisDemo from './components/TextEllipsisDemo.vue';
 import ButtonHeightDemo from './components/ButtonHeightDemo.vue';
 import DateRangeDemo from './components/DateRangeDemo.vue';
+import SearchDebounce from './components/SearchDebounce.vue';
+import CaseSearch from './components/CaseSearch.vue';
 import dayjs from 'dayjs';
 
 const testVal = ref(1.2);
