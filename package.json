@@ -12,6 +12,7 @@
     "@antv/g2": "^5.4.7",
     "@wangeditor/editor": "^5.1.23",
     "@wangeditor/editor-for-vue": "^5.1.12",
+    "ant-design-vue": "^4.2.3",
     "axios": "^1.13.5",
     "dayjs": "^1.11.19",
     "echarts": "^6.0.0",
