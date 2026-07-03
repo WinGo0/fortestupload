@@ -21,8 +21,14 @@
         <!-- </div> -->
 
         <!-- <div class="chart-wrapper" style="height: auto; width: 1000px;"> -->
-          <h3 style="color:#fff;">流程阶段编辑</h3>
-          <StageBuilder />
+          <!-- <h3 style="color:#fff;">流程阶段编辑</h3>
+          <StageBuilder /> -->
+
+          <div class="chart-wrapper" style="height: auto; width: 720px;">
+            <h3 style="color:#fff;">定时任务 - 频率与执行时间</h3>
+            <TaskSchedulePicker v-model="taskCron" />
+            <p style="color:#aaa;font-size:12px;margin-top:8px;">接口提交值：{{ taskCron }}</p>
+          </div>
     <!-- 按钮高度演示 -->
     <!-- <div class="chart-wrapper" style="height: auto;">
       <ButtonHeightDemo />
@@ -86,10 +92,14 @@ import SearchDebounce from './components/SearchDebounce.vue';
 import CaseSearch from './components/CaseSearch.vue';
 import AtreeTemplate from './components/AtreeTemplate.vue';
 import ContractInfoForm from './components/ContractInfoForm.vue';
-    import StageBuilder from './components/StageBuilder.vue';
+    // import StageBuilder from './components/StageBuilder.vue';
+import TaskSchedulePicker from './components/TaskSchedulePicker.vue';
+import { createDefaultCron } from './utils/taskSchedule.js';
 import dayjs from 'dayjs';
 
 const testVal = ref(1.2);
+/** 提交接口的 Cron 字段 */
+const taskCron = ref(createDefaultCron());
 
 const chartData = ref({
   dateList: [],
