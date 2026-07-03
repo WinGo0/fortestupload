@@ -17,10 +17,20 @@
     <!-- <div class="chart-wrapper" style="height: auto;">
       <DateRangeDemo />
     </div> -->
+          <!-- <AtreeTemplate /> -->
+        <!-- </div> -->
 
+        <!-- <div class="chart-wrapper" style="height: auto; width: 1000px;"> -->
+          <h3 style="color:#fff;">流程阶段编辑</h3>
+          <StageBuilder />
     <!-- 按钮高度演示 -->
     <!-- <div class="chart-wrapper" style="height: auto;">
       <ButtonHeightDemo />
+    </div> -->
+
+    <!-- 新增合同信息 -->
+    <!-- <div class="chart-wrapper" style="height: auto; width: 1200px;">
+      <ContractInfoForm />
     </div> -->
 
     <!-- 防抖演示 (新版) -->
@@ -44,9 +54,14 @@
     </div> -->
 
     <!-- 搜索病例展示 -->
-    <div class="case-wrapper" style="flex: 1; width: 100%;">
+    <!-- <div class="case-wrapper" style="flex: 1; width: 100%;">
       <CaseSearch />
-    </div>
+    </div> -->
+
+        <!-- 搜索病例展示 -->
+    <!-- <div class="case-wrapper" style="flex: 1; width: 100%;">
+      <AtreeTemplate />
+    </div> -->
 
     <!-- <div class="chart-wrapper">
       <h3>Test Raw el-input-number with Precision 8</h3>
@@ -69,6 +84,9 @@ import ButtonHeightDemo from './components/ButtonHeightDemo.vue';
 import DateRangeDemo from './components/DateRangeDemo.vue';
 import SearchDebounce from './components/SearchDebounce.vue';
 import CaseSearch from './components/CaseSearch.vue';
+import AtreeTemplate from './components/AtreeTemplate.vue';
+import ContractInfoForm from './components/ContractInfoForm.vue';
+    import StageBuilder from './components/StageBuilder.vue';
 import dayjs from 'dayjs';
 
 const testVal = ref(1.2);
