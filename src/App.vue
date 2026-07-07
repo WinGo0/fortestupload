@@ -26,7 +26,7 @@
 
           <div class="chart-wrapper" style="height: auto; width: 720px;">
             <h3 style="color:#fff;">定时任务 - 频率与执行时间</h3>
-            <TaskSchedulePicker v-model="taskCron" />
+            <TaskSchedulePicker v-model="taskCron"  />
             <p style="color:#aaa;font-size:12px;margin-top:8px;">接口提交值：{{ taskCron }}</p>
           </div>
     <!-- 按钮高度演示 -->
@@ -94,12 +94,21 @@ import AtreeTemplate from './components/AtreeTemplate.vue';
 import ContractInfoForm from './components/ContractInfoForm.vue';
     // import StageBuilder from './components/StageBuilder.vue';
 import TaskSchedulePicker from './components/TaskSchedulePicker.vue';
-import { createDefaultCron } from './utils/taskSchedule.js';
+// import { createDefaultCron } from './utils/taskSchedule.js';
 import dayjs from 'dayjs';
 
 const testVal = ref(1.2);
 /** 提交接口的 Cron 字段 */
-const taskCron = ref(createDefaultCron());
+// const taskCron = ref(createDefaultCron());
+const taskCron = ref({
+  frequencyType: 'daily',
+  weekDays: [],
+  monthDays: [],
+  intervalHours: 0,
+  intervalMinutes: 30,
+  intervalSeconds: 0,
+  fixedTime: '08:00:00'
+})
 
 const chartData = ref({
   dateList: [],

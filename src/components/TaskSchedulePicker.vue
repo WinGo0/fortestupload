@@ -26,7 +26,6 @@
             collapse-tags-tooltip
             placeholder="选择星期"
             style="width: 280px; margin-left: 12px"
-            @change="syncCron"
           >
             <el-option
               v-for="item in weekDayOptions"
@@ -44,7 +43,6 @@
             collapse-tags-tooltip
             placeholder="选择日期"
             style="width: 280px; margin-left: 12px"
-            @change="syncCron"
           >
             <el-option
               v-for="day in 31"
@@ -59,32 +57,11 @@
       <!-- 间隔：时/分/秒 -->
       <el-form-item v-if="isInterval" label="执行时间:" required>
         <div class="interval-time-row">
-          <el-input-number
-            v-model="schedule.intervalHours"
-            :min="0"
-            :max="999"
-            :controls="false"
-            placeholder="00"
-            @change="syncCron"
-          />
+          <el-input-number v-model="schedule.intervalHours" :min="0" :max="999" :controls="false" placeholder="00" />
           <span class="unit">时</span>
-          <el-input-number
-            v-model="schedule.intervalMinutes"
-            :min="0"
-            :max="59"
-            :controls="false"
-            placeholder="00"
-            @change="syncCron"
-          />
+          <el-input-number v-model="schedule.intervalMinutes" :min="0" :max="59" :controls="false" placeholder="00" />
           <span class="unit">分</span>
-          <el-input-number
-            v-model="schedule.intervalSeconds"
-            :min="0"
-            :max="59"
-            :controls="false"
-            placeholder="00"
-            @change="syncCron"
-          />
+          <el-input-number v-model="schedule.intervalSeconds" :min="0" :max="59" :controls="false" placeholder="00" />
           <span class="unit">秒</span>
           <span class="hint">每隔上述时间执行一次</span>
         </div>
@@ -98,7 +75,6 @@
           value-format="HH:mm:ss"
           placeholder="选择时刻"
           style="width: 160px"
-          @change="syncCron"
         />
       </el-form-item>
     </el-form>
@@ -122,20 +98,39 @@
         <span class="next-time">{{ nextExecutionTime || '—' }}</span>
       </div>
     </div>
+
+    <!-- 提交按钮 -->
+    <div class="submit-row">
+      <el-button type="primary" @click="handleSubmit">保存</el-button>
+    </div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, watch } from 'vue'
-import {
-  FREQUENCY,
-  weekDayOptions,
-  cronToSchedule,
-  scheduleToCron,
-  formatFrequency,
-  formatExecutionTime,
-  calcNextExecutionTime
-} from '../utils/taskSchedule.js'
+import dayjs from 'dayjs'
+
+// ============ 常量定义 ============
+const FREQUENCY = {
+  INTERVAL: 'interval',
+  DAILY: 'daily',
+  WEEKLY: 'weekly',
+  MONTHLY: 'monthly'
+}
+
+const weekDayOptions = [
+  { label: '周一', value: 1 },
+  { label: '周二', value: 2 },
+  { label: '周三', value: 3 },
+  { label: '周四', value: 4 },
+  { label: '周五', value: 5 },
+  { label: '周六', value: 6 },
+  { label: '周日', value: 0 }
+]
+
+const weekDayLabelMap = Object.fromEntries(
+  weekDayOptions.map(({ label, value }) => [value, label])
+)
 
 const frequencyOptions = [
   { label: '间隔', value: FREQUENCY.INTERVAL },
@@ -144,57 +139,179 @@ const frequencyOptions = [
   { label: '每月', value: FREQUENCY.MONTHLY }
 ]
 
+// ============ Props ============
 const props = defineProps({
-  /** 接口字段：Quartz 6 位 Cron 表达式 */
+  /** 表单配置对象（新增/编辑时直接传入） */
   modelValue: {
-    type: String,
-    default: ''
+    type: Object,
+    default: () => ({})
   }
 })
 
-const emit = defineEmits(['update:modelValue', 'change'])
+// ============ 状态 ============
+const defaultSchedule = {
+  frequencyType: FREQUENCY.DAILY,
+  weekDays: [],
+  monthDays: [],
+  intervalHours: 0,
+  intervalMinutes: 30,
+  intervalSeconds: 0,
+  fixedTime: '08:00:00'
+}
 
-/** 内部 UI 状态，与 Cron 双向同步 */
-const schedule = ref(cronToSchedule(props.modelValue))
+const schedule = ref({ ...defaultSchedule })
 
 const isInterval = computed(() => schedule.value.frequencyType === FREQUENCY.INTERVAL)
 
-const cronExpression = computed(() => scheduleToCron(schedule.value))
-const frequencyDisplay = computed(() => formatFrequency(schedule.value))
-const executionTimeDisplay = computed(() => formatExecutionTime(schedule.value))
-const nextExecutionTime = computed(() => calcNextExecutionTime(schedule.value))
+// ============ Cron 生成 ============
+const cronExpression = computed(() => {
+  const c = schedule.value
 
-/** 配置变更 → 生成 Cron 并 emit（提交接口用这个值） */
-function syncCron() {
-  const cron = scheduleToCron(schedule.value)
-  if (cron !== props.modelValue) {
-    emit('update:modelValue', cron)
-    emit('change', cron)
+  // 间隔
+  if (c.frequencyType === FREQUENCY.INTERVAL) {
+    const totalSec = (c.intervalHours ?? 0) * 3600 + (c.intervalMinutes ?? 0) * 60 + (c.intervalSeconds ?? 0)
+    if (totalSec <= 0) return '0/30 * * * * ?'
+    if (totalSec % 3600 === 0) return `0 0 0/${totalSec / 3600} * * ?`
+    if (totalSec % 60 === 0) return `0 0/${totalSec / 60} * * * ?`
+    return `0/${totalSec} * * * * ?`
   }
-}
 
-function onFrequencyChange(type) {
-  if (type === FREQUENCY.WEEKLY && !schedule.value.weekDays.length) {
-    schedule.value.weekDays = [1]
-  }
-  if (type === FREQUENCY.MONTHLY && !schedule.value.monthDays.length) {
-    schedule.value.monthDays = [1]
-  }
-  syncCron()
-}
+  const [h = 8, m = 0, s = 0] = (c.fixedTime || '08:00:00').split(':').map(Number)
 
-/** 外部传入 Cron（编辑回显）→ 解析为 UI 配置 */
-watch(
-  () => props.modelValue,
-  (cron) => {
-    if (!cron) return
-    const parsed = cronToSchedule(cron)
-    const currentCron = scheduleToCron(schedule.value)
-    if (cron !== currentCron) {
-      schedule.value = parsed
+  if (c.frequencyType === FREQUENCY.DAILY) return `${s} ${m} ${h} * * ?`
+
+  if (c.frequencyType === FREQUENCY.WEEKLY) {
+    const days = [...(c.weekDays || [])]
+      .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+      .map(d => d + 1) // dayjs(0=周日) → Quartz(1=周日)
+      .join(',')
+    return `${s} ${m} ${h} ? * ${days || '2'}`
+  }
+
+  if (c.frequencyType === FREQUENCY.MONTHLY) {
+    const days = [...(c.monthDays || [])].sort((a, b) => a - b).join(',')
+    return `${s} ${m} ${h} ${days || '1'} * ?`
+  }
+
+  return '0 0 8 * * ?'
+})
+
+// ============ 展示文案 ============
+const frequencyDisplay = computed(() => {
+  const map = { [FREQUENCY.INTERVAL]: '间隔', [FREQUENCY.DAILY]: '每天', [FREQUENCY.WEEKLY]: '每周', [FREQUENCY.MONTHLY]: '每月' }
+  const base = map[schedule.value.frequencyType] || ''
+
+  if (schedule.value.frequencyType === FREQUENCY.WEEKLY && schedule.value.weekDays?.length) {
+    const days = [...schedule.value.weekDays]
+      .sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b))
+      .map(d => weekDayLabelMap[d])
+      .join('、')
+    return `${base}（${days}）`
+  }
+
+  if (schedule.value.frequencyType === FREQUENCY.MONTHLY && schedule.value.monthDays?.length) {
+    const days = [...schedule.value.monthDays].sort((a, b) => a - b).join('、')
+    return `${base}（${days}日）`
+  }
+
+  return base
+})
+
+const executionTimeDisplay = computed(() => {
+  if (schedule.value.frequencyType === FREQUENCY.INTERVAL) {
+    const { intervalHours: h = 0, intervalMinutes: m = 0, intervalSeconds: s = 0 } = schedule.value
+    return `每 ${h} 时 ${m} 分 ${s} 秒`
+  }
+  return (schedule.value.fixedTime || '08:00:00').slice(0, 8)
+})
+
+// ============ 下次执行时间 ============
+const nextExecutionTime = computed(() => {
+  const c = schedule.value
+  const now = dayjs()
+
+  if (c.frequencyType === FREQUENCY.INTERVAL) {
+    const ms = ((c.intervalHours ?? 0) * 3600 + (c.intervalMinutes ?? 0) * 60 + (c.intervalSeconds ?? 0)) * 1000
+    return ms > 0 ? now.add(ms, 'millisecond').format('YYYY-MM-DD HH:mm:ss') : null
+  }
+
+  const [h = 8, m = 0, s = 0] = (c.fixedTime || '08:00:00').split(':').map(Number)
+  const applyTime = (base) => base.hour(h).minute(m).second(s).millisecond(0)
+
+  if (c.frequencyType === FREQUENCY.DAILY) {
+    let next = applyTime(now)
+    if (!next.isAfter(now)) next = next.add(1, 'day')
+    return next.format('YYYY-MM-DD HH:mm:ss')
+  }
+
+  if (c.frequencyType === FREQUENCY.WEEKLY) {
+    const days = c.weekDays
+    if (!days?.length) return null
+    for (let i = 0; i < 8; i++) {
+      const candidate = now.add(i, 'day')
+      if (days.includes(candidate.day())) {
+        const at = applyTime(candidate)
+        if (at.isAfter(now)) return at.format('YYYY-MM-DD HH:mm:ss')
+      }
     }
+    return null
   }
-)
+
+  if (c.frequencyType === FREQUENCY.MONTHLY) {
+    const days = [...(c.monthDays || [])].sort((a, b) => a - b)
+    if (!days.length) return null
+    for (let offset = 0; offset < 14; offset++) {
+      const monthStart = now.startOf('month').add(offset, 'month')
+      for (const day of days) {
+        const candidate = monthStart.date(day)
+        if (candidate.month() !== monthStart.month()) continue
+        const at = applyTime(candidate)
+        if (at.isAfter(now)) return at.format('YYYY-MM-DD HH:mm:ss')
+      }
+    }
+    return null
+  }
+
+  return null
+})
+
+// ============ 校验 ============
+function validate() {
+  const c = schedule.value
+  if (!c.frequencyType) return '请选择频率'
+  if (c.frequencyType === FREQUENCY.INTERVAL) {
+    const ms = ((c.intervalHours ?? 0) * 3600 + (c.intervalMinutes ?? 0) * 60 + (c.intervalSeconds ?? 0)) * 1000
+    if (ms <= 0) return '间隔时间不能为 0'
+  }
+  if (c.frequencyType === FREQUENCY.WEEKLY && !c.weekDays?.length) return '请选择星期'
+  if (c.frequencyType === FREQUENCY.MONTHLY && !c.monthDays?.length) return '请选择日期'
+  if (c.frequencyType !== FREQUENCY.INTERVAL && !c.fixedTime) return '请选择执行时间'
+  return ''
+}
+
+// ============ 事件 ============
+function onFrequencyChange(type) {
+  if (type === FREQUENCY.WEEKLY && !schedule.value.weekDays.length) schedule.value.weekDays = [1]
+  if (type === FREQUENCY.MONTHLY && !schedule.value.monthDays.length) schedule.value.monthDays = [1]
+}
+
+function handleSubmit() {
+  const err = validate()
+  if (err) {
+    // 这里可以用 ElMessage.error(err) 或其他提示方式
+    console.error(err)
+    return
+  }
+  // 在组件内部处理提交，不 emit 给父组件
+  console.log('表单数据:', { ...schedule.value })
+  console.log('Cron 表达式:', cronExpression.value)
+}
+
+// ============ 回显（直接用表单对象，不再解析 Cron） ============
+watch(() => props.modelValue, (val) => {
+  if (!val || typeof val !== 'object') return
+  schedule.value = { ...defaultSchedule, ...val }
+}, { immediate: true, deep: true })
 </script>
 
 <style scoped>
@@ -267,5 +384,10 @@ watch(
 .next-time {
   color: #409eff;
   font-weight: 500;
+}
+
+.submit-row {
+  margin-top: 20px;
+  text-align: right;
 }
 </style>
