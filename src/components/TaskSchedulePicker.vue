@@ -167,13 +167,18 @@ const isInterval = computed(() => schedule.value.frequencyType === FREQUENCY.INT
 const cronExpression = computed(() => {
   const c = schedule.value
 
-  // 间隔
+  // 间隔：限制单一单位，确保 Quartz cron 行为正确
   if (c.frequencyType === FREQUENCY.INTERVAL) {
-    const totalSec = (c.intervalHours ?? 0) * 3600 + (c.intervalMinutes ?? 0) * 60 + (c.intervalSeconds ?? 0)
-    if (totalSec <= 0) return '0/30 * * * * ?'
-    if (totalSec % 3600 === 0) return `0 0 0/${totalSec / 3600} * * ?`
-    if (totalSec % 60 === 0) return `0 0/${totalSec / 60} * * * ?`
-    return `0/${totalSec} * * * * ?`
+    const h = c.intervalHours ?? 0
+    const m = c.intervalMinutes ?? 0
+    const s = c.intervalSeconds ?? 0
+
+    if (h > 0 && h <= 23) return `0 0 0/${h} * * ?`
+    if (m > 0 && m <= 59) return `0 0/${m} * * * ?`
+    if (s > 0 && s <= 59) return `0/${s} * * * * ?`
+
+    // fallback：默认每 30 分钟
+    return '0 0/30 * * * ?'
   }
 
   const [h = 8, m = 0, s = 0] = (c.fixedTime || '08:00:00').split(':').map(Number)
@@ -219,8 +224,13 @@ const frequencyDisplay = computed(() => {
 
 const executionTimeDisplay = computed(() => {
   if (schedule.value.frequencyType === FREQUENCY.INTERVAL) {
-    const { intervalHours: h = 0, intervalMinutes: m = 0, intervalSeconds: s = 0 } = schedule.value
-    return `每 ${h} 时 ${m} 分 ${s} 秒`
+    const h = schedule.value.intervalHours ?? 0
+    const m = schedule.value.intervalMinutes ?? 0
+    const s = schedule.value.intervalSeconds ?? 0
+    if (h > 0) return `每隔 ${h} 小时`
+    if (m > 0) return `每隔 ${m} 分钟`
+    if (s > 0) return `每隔 ${s} 秒`
+    return '每隔 30 分钟'
   }
   return (schedule.value.fixedTime || '08:00:00').slice(0, 8)
 })
@@ -231,8 +241,15 @@ const nextExecutionTime = computed(() => {
   const now = dayjs()
 
   if (c.frequencyType === FREQUENCY.INTERVAL) {
-    const ms = ((c.intervalHours ?? 0) * 3600 + (c.intervalMinutes ?? 0) * 60 + (c.intervalSeconds ?? 0)) * 1000
-    return ms > 0 ? now.add(ms, 'millisecond').format('YYYY-MM-DD HH:mm:ss') : null
+    const h = c.intervalHours ?? 0
+    const m = c.intervalMinutes ?? 0
+    const s = c.intervalSeconds ?? 0
+    let ms = 0
+    if (h > 0) ms = h * 3600 * 1000
+    else if (m > 0) ms = m * 60 * 1000
+    else if (s > 0) ms = s * 1000
+    else ms = 30 * 60 * 1000 // 默认 30 分钟
+    return now.add(ms, 'millisecond').format('YYYY-MM-DD HH:mm:ss')
   }
 
   const [h = 8, m = 0, s = 0] = (c.fixedTime || '08:00:00').split(':').map(Number)
@@ -279,10 +296,20 @@ const nextExecutionTime = computed(() => {
 function validate() {
   const c = schedule.value
   if (!c.frequencyType) return '请选择频率'
+
   if (c.frequencyType === FREQUENCY.INTERVAL) {
-    const ms = ((c.intervalHours ?? 0) * 3600 + (c.intervalMinutes ?? 0) * 60 + (c.intervalSeconds ?? 0)) * 1000
-    if (ms <= 0) return '间隔时间不能为 0'
+    const h = c.intervalHours ?? 0
+    const m = c.intervalMinutes ?? 0
+    const s = c.intervalSeconds ?? 0
+
+    const activeCount = [h, m, s].filter(v => v > 0).length
+    if (activeCount === 0) return '间隔时间不能为 0'
+    if (activeCount > 1) return '间隔时间只能设置一个单位（时/分/秒）'
+    if (h > 23) return '小时间隔不能超过 23'
+    if (m > 59) return '分钟间隔不能超过 59'
+    if (s > 59) return '秒间隔不能超过 59'
   }
+
   if (c.frequencyType === FREQUENCY.WEEKLY && !c.weekDays?.length) return '请选择星期'
   if (c.frequencyType === FREQUENCY.MONTHLY && !c.monthDays?.length) return '请选择日期'
   if (c.frequencyType !== FREQUENCY.INTERVAL && !c.fixedTime) return '请选择执行时间'
@@ -291,6 +318,10 @@ function validate() {
 
 // ============ 事件 ============
 function onFrequencyChange(type) {
+  // 切换频率时清理不相关的数据，避免脏数据残留
+  if (type !== FREQUENCY.WEEKLY) schedule.value.weekDays = []
+  if (type !== FREQUENCY.MONTHLY) schedule.value.monthDays = []
+
   if (type === FREQUENCY.WEEKLY && !schedule.value.weekDays.length) schedule.value.weekDays = [1]
   if (type === FREQUENCY.MONTHLY && !schedule.value.monthDays.length) schedule.value.monthDays = [1]
 }
@@ -306,6 +337,23 @@ function handleSubmit() {
   console.log('表单数据:', { ...schedule.value })
   console.log('Cron 表达式:', cronExpression.value)
 }
+
+// ============ Interval 输入框联动：只能设置一个单位 ============
+watch(
+  () => [schedule.value.intervalHours, schedule.value.intervalMinutes, schedule.value.intervalSeconds],
+  ([newH, newM, newS], [oldH, oldM, oldS]) => {
+    if (newH !== oldH && newH > 0) {
+      schedule.value.intervalMinutes = 0
+      schedule.value.intervalSeconds = 0
+    } else if (newM !== oldM && newM > 0) {
+      schedule.value.intervalHours = 0
+      schedule.value.intervalSeconds = 0
+    } else if (newS !== oldS && newS > 0) {
+      schedule.value.intervalHours = 0
+      schedule.value.intervalMinutes = 0
+    }
+  }
+)
 
 // ============ 回显（直接用表单对象，不再解析 Cron） ============
 watch(() => props.modelValue, (val) => {

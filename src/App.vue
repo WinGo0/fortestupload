@@ -24,12 +24,12 @@
           <!-- <h3 style="color:#fff;">流程阶段编辑</h3>
           <StageBuilder /> -->
 
-          <!-- <div class="chart-wrapper" style="height: auto; width: 720px;">
-            <h3 style="color:#fff;">定时任务 - 频率与执行时间</h3>
-            <TaskSchedulePicker v-model="taskCron"  />
-            <p style="color:#aaa;font-size:12px;margin-top:8px;">接口提交值：{{ taskCron }}</p>
-          </div> -->
-          <TaskSchedulePickerDetail v-model="taskCron"  />
+          <div class="chart-wrapper" style="height: auto; width: 720px;">
+      <h3 style="color:#fff;">定时任务 - 频率与执行时间</h3>
+      <TaskSchedulePicker v-model="taskCron" />
+      <p style="color:#aaa;font-size:12px;margin-top:8px;">接口提交值：{{ taskCron }}</p>
+    </div>
+    <!-- <TaskSchedulePickerDetail v-model="taskCron" /> -->
     <!-- 按钮高度演示 -->
     <!-- <div class="chart-wrapper" style="height: auto;">
       <ButtonHeightDemo />
@@ -80,22 +80,22 @@
 
 <script setup>
 import { ref, onMounted } from 'vue';
-import LineChart from './components/LineChart.vue';
-import G2LineChart from './components/g2/G2LineChart.vue';
-import DataImport from './components/DataImport.vue';
-import AlarmSettingForm from './components/AlarmSettingForm.vue';
-import RichTextEditor from './components/RichTextEditor.vue';
-import Detail from './components/Detail.vue';
-import TextEllipsisDemo from './components/TextEllipsisDemo.vue';
-import ButtonHeightDemo from './components/ButtonHeightDemo.vue';
-import DateRangeDemo from './components/DateRangeDemo.vue';
-import SearchDebounce from './components/SearchDebounce.vue';
-import CaseSearch from './components/CaseSearch.vue';
-import AtreeTemplate from './components/AtreeTemplate.vue';
-import ContractInfoForm from './components/ContractInfoForm.vue';
-    // import StageBuilder from './components/StageBuilder.vue';
+// import LineChart from './components/LineChart.vue';
+// import G2LineChart from './components/g2/G2LineChart.vue';
+// import DataImport from './components/DataImport.vue';
+// import AlarmSettingForm from './components/AlarmSettingForm.vue';
+// import RichTextEditor from './components/RichTextEditor.vue';
+// import Detail from './components/Detail.vue';
+// import TextEllipsisDemo from './components/TextEllipsisDemo.vue';
+// import ButtonHeightDemo from './components/ButtonHeightDemo.vue';
+// import DateRangeDemo from './components/DateRangeDemo.vue';
+// import SearchDebounce from './components/SearchDebounce.vue';
+// import CaseSearch from './components/CaseSearch.vue';
+// import AtreeTemplate from './components/AtreeTemplate.vue';
+// import ContractInfoForm from './components/ContractInfoForm.vue';
+// import StageBuilder from './components/StageBuilder.vue';
 import TaskSchedulePicker from './components/TaskSchedulePicker.vue';
-import TaskSchedulePickerDetail from './components/TaskSchedulePickerDetail.vue';
+// import TaskSchedulePickerDetail from './components/TaskSchedulePickerDetail.vue';
 // import { createDefaultCron } from './utils/taskSchedule.js';
 import dayjs from 'dayjs';
 
