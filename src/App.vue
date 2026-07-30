@@ -24,11 +24,11 @@
           <!-- <h3 style="color:#fff;">流程阶段编辑</h3>
           <StageBuilder /> -->
 
-          <div class="chart-wrapper" style="height: auto; width: 720px;">
-      <h3 style="color:#fff;">定时任务 - 频率与执行时间</h3>
-      <TaskSchedulePicker v-model="taskCron" />
-      <p style="color:#aaa;font-size:12px;margin-top:8px;">接口提交值：{{ taskCron }}</p>
-    </div>
+          <!--<div class="chart-wrapper" style="height: auto; width: 720px;">-->
+<!--      <h3 style="color:#fff;">定时任务 - 频率与执行时间</h3>-->
+<!--      <TaskSchedulePicker v-model="taskCron" />-->
+<!--      <p style="color:#aaa;font-size:12px;margin-top:8px;">接口提交值：{{ taskCron }}</p>-->
+<!--    </div>-->
     <!-- <TaskSchedulePickerDetail v-model="taskCron" /> -->
     <!-- 按钮高度演示 -->
     <!-- <div class="chart-wrapper" style="height: auto;">
@@ -75,6 +75,11 @@
       <el-input-number v-model="testVal" :precision="8" :controls="false" />
       <div style="margin-top: 10px; color: #fff;">Value: {{ testVal }}</div>
     </div> -->
+
+    <!-- el-select 下拉滚动加载 -->
+    <div class="select-viewport">
+      <SelectScrollLoad />
+    </div>
   </div>
 </template>
 
@@ -94,9 +99,10 @@ import { ref, onMounted } from 'vue';
 // import AtreeTemplate from './components/AtreeTemplate.vue';
 // import ContractInfoForm from './components/ContractInfoForm.vue';
 // import StageBuilder from './components/StageBuilder.vue';
-import TaskSchedulePicker from './components/TaskSchedulePicker.vue';
+// import TaskSchedulePicker from './components/TaskSchedulePicker.vue';
 // import TaskSchedulePickerDetail from './components/TaskSchedulePickerDetail.vue';
 // import { createDefaultCron } from './utils/taskSchedule.js';
+import SelectScrollLoad from './components/SelectScrollLoad.vue';
 import dayjs from 'dayjs';
 
 const testVal = ref(1.2);
@@ -153,6 +159,16 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
+
+.select-viewport {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 40px;
+}
   gap: 20px;
   padding: 20px;
 }
