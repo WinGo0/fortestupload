@@ -1,4 +1,3 @@
-
 <template>
   <div class="rich-text-editor">
     <el-card>
@@ -47,10 +46,26 @@
             <el-button type="primary" @click="handleSubmit" :loading="submitting">
               提交保存
             </el-button>
+            <el-button type="success" @click="triggerFileInput">
+              <el-icon style="margin-right:4px"><Upload /></el-icon>
+              上传表格（行列转置）
+            </el-button>
             <el-button @click="handlePreview">预览内容</el-button>
             <el-button @click="handleReset">重置表单</el-button>
             <el-button @click="handleLoadData">加载示例数据</el-button>
           </el-space>
+
+          <!-- 隐藏的文件输入 -->
+          <input
+            ref="fileInputRef"
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            style="display:none"
+            @change="handleFileChange"
+          />
+          <span v-if="uploading" style="margin-left:8px;color:#409eff;">
+            正在解析表格...
+          </span>
         </el-form-item>
       </el-form>
 
@@ -82,6 +97,8 @@
 import { ref, shallowRef, onBeforeUnmount } from 'vue'
 import '@wangeditor/editor/dist/css/style.css'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
+import * as XLSX from 'xlsx'
+import { Upload } from '@element-plus/icons-vue'
 import request from '../utils/request'
 import {
   ElCard,
@@ -98,6 +115,12 @@ const formRef = ref(null)
 
 // 编辑器实例，必须用 shallowRef
 const editorRef = shallowRef()
+
+// 文件输入引用
+const fileInputRef = ref(null)
+
+// 上传状态
+const uploading = ref(false)
 
 // 表单数据
 const formData = ref({
@@ -143,6 +166,177 @@ const showPreview = ref(false)
 
 // 提交参数（用于展示）
 const submitParams = ref({})
+
+// ---------- 表格上传相关 ----------
+
+// 触发文件选择
+function triggerFileInput() {
+  if (!editorRef.value) {
+    ElMessage.warning('请等待编辑器加载完成')
+    return
+  }
+  fileInputRef.value?.click()
+}
+
+// 处理文件选择
+async function handleFileChange(event) {
+  const file = event.target.files?.[0]
+  if (!file) return
+
+  const ext = file.name.split('.').pop()?.toLowerCase()
+
+  try {
+    uploading.value = true
+    let rows = []
+
+    if (ext === 'csv') {
+      rows = await parseCSV(file)
+    } else if (ext === 'xlsx' || ext === 'xls') {
+      rows = await parseExcel(file)
+    } else {
+      ElMessage.error('仅支持 .xlsx、.xls、.csv 格式文件')
+      return
+    }
+
+    if (!rows || rows.length === 0) {
+      ElMessage.warning('表格数据为空')
+      return
+    }
+
+    // 转置：行变列，列变行
+    const transposed = transpose(rows)
+
+    // 构建 HTML 表格并插入编辑器
+    const html = buildTableHTML(transposed)
+    editorRef.value.dangerouslyInsertHtml(html)
+    ElMessage.success(`表格已插入（${transposed.length} 行 × ${transposed[0]?.length || 0} 列，已转置）`)
+  } catch (err) {
+    console.error('表格解析失败:', err)
+    ElMessage.error('表格解析失败: ' + (err.message || '未知错误'))
+  } finally {
+    uploading.value = false
+    // 重置 file input，允许再次选择同一文件
+    event.target.value = ''
+  }
+}
+
+// 解析 CSV 文件
+function parseCSV(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const text = e.target.result
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== '')
+        const result = lines.map(line => {
+          // 处理 CSV 中的引号包裹字段
+          const cells = []
+          let current = ''
+          let inQuotes = false
+          for (let i = 0; i < line.length; i++) {
+            const ch = line[i]
+            if (ch === '"') {
+              if (inQuotes && line[i + 1] === '"') {
+                current += '"'
+                i++
+              } else {
+                inQuotes = !inQuotes
+              }
+            } else if (ch === ',' && !inQuotes) {
+              cells.push(current.trim())
+              current = ''
+            } else {
+              current += ch
+            }
+          }
+          cells.push(current.trim())
+          return cells
+        })
+        resolve(result)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = () => reject(new Error('文件读取失败'))
+    reader.readAsText(file)
+  })
+}
+
+// 解析 Excel 文件（使用 xlsx / SheetJS）
+function parseExcel(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target.result)
+        const workbook = XLSX.read(data, { type: 'array' })
+
+        const firstSheetName = workbook.SheetNames[0]
+        if (!firstSheetName) {
+          reject(new Error('未找到工作表'))
+          return
+        }
+
+        const sheet = workbook.Sheets[firstSheetName]
+        // header: 1 返回二维数组，defval 填充空单元格
+        const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' })
+        // 过滤掉全空行
+        const filtered = rows.filter(row => row.some(cell => String(cell ?? '').trim() !== ''))
+        resolve(filtered)
+      } catch (err) {
+        reject(err)
+      }
+    }
+    reader.onerror = () => reject(new Error('文件读取失败'))
+    reader.readAsArrayBuffer(file)
+  })
+}
+
+// 转置二维数组（行变列，列变行）
+function transpose(rows) {
+  if (!rows || rows.length === 0) return []
+  const colCount = Math.max(...rows.map(r => r.length))
+  const result = Array.from({ length: colCount }, () =>
+    Array.from({ length: rows.length }, () => '')
+  )
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = 0; j < (rows[i]?.length || 0); j++) {
+      result[j][i] = rows[i][j] || ''
+    }
+  }
+  return result
+}
+
+// 构建 wangEditor 可识别的 HTML 表格
+function buildTableHTML(rows) {
+  if (!rows || rows.length === 0) return ''
+  let html = '<table><tbody>'
+  for (let i = 0; i < rows.length; i++) {
+    html += '<tr>'
+    // 第一行（原第一列）默认作为表头
+    const isHeader = (i === 0)
+    for (const cell of rows[i]) {
+      const tag = isHeader ? 'th' : 'td'
+      const content = escapeHtml(String(cell ?? ''))
+      html += `<${tag}>${content}</${tag}>`
+    }
+    html += '</tr>'
+  }
+  html += '</tbody></table>'
+  return html
+}
+
+// HTML 转义（防 XSS）
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;')
+}
+
+// ---------- 编辑器配置 ----------
 
 // 工具栏配置
 const toolbarConfig = {
