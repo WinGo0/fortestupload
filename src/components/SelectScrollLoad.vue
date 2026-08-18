@@ -4,6 +4,8 @@
     <el-select
       v-model="selectedValue"
       filterable
+      remote
+      :remote-method="onRemoteSearch"
       clearable
       placeholder="请选择选项"
       style="width: 400px"
@@ -29,63 +31,86 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
+import { ref, nextTick, onMounted } from 'vue'
+
+const props = defineProps({
+  modelValue: { type: String, default: '' },
+  searchValue: { type: String, default: '' }
+})
+
+const emit = defineEmits(['update:modelValue'])
 
 const PAGE_SIZE = 20
 const TOTAL = 156
 
-const selectedValue = ref('')
+const selectedValue = ref(props.modelValue || '')
 const optionList = ref([])
 const currentPage = ref(0)
 const loading = ref(false)
 const hasMore = ref(true)
+const keyword = ref('')
 
-// 模拟异步请求数据
-const fetchOptions = async (page) => {
+// 生成全部数据并支持关键字过滤
+const fetchOptions = async (page, kw = '') => {
   return new Promise((resolve) => {
     setTimeout(() => {
-      const start = page * PAGE_SIZE
-      const count = Math.min(PAGE_SIZE, TOTAL - start)
-      const items = []
-      for (let i = 0; i < count; i++) {
-        const idx = start + i + 1
-        items.push({
-          value: `option-${idx}`,
-          label: `选项 ${idx} - ${String.fromCharCode(64 + (idx % 26 || 26))}`
-        })
+      const allItems = []
+      for (let i = 1; i <= TOTAL; i++) {
+        const label = `选项 ${i} - ${String.fromCharCode(64 + (i % 26 || 26))}`
+        if (!kw || label.toLowerCase().includes(kw.toLowerCase())) {
+          allItems.push({ value: `option-${i}`, label })
+        }
       }
-      resolve({ items, total: TOTAL })
+      const start = page * PAGE_SIZE
+      const items = allItems.slice(start, start + PAGE_SIZE)
+      resolve({ items, total: allItems.length })
     }, 600)
   })
 }
 
-// 加载下一页
+// 加载指定页（远程搜索时从第 0 页开始）
+const loadPage = async (page, kw = '') => {
+  console.log('sss',page);
+  console.log('kw',kw);
+  
+  if (loading.value) return
+  loading.value = true
+  const { items, total } = await fetchOptions(page, kw)
+  if (page === 0) {
+    optionList.value = items
+  } else {
+    optionList.value = [...optionList.value, ...items]
+  }
+  currentPage.value = page
+  hasMore.value = optionList.value.length < total
+  loading.value = false
+}
+
+// 用户输入搜索时触发
+const onRemoteSearch = (query) => {
+  keyword.value = query
+  currentPage.value = 0
+  hasMore.value = true
+  loadPage(0, query)
+}
+
+// 滚动到底部加载下一页
 const loadNextPage = async () => {
   if (loading.value || !hasMore.value) return
-  loading.value = true
-  const nextPage = currentPage.value + 1
-  const { items } = await fetchOptions(nextPage)
-  optionList.value = [...optionList.value, ...items]
-  currentPage.value = nextPage
-  hasMore.value = optionList.value.length < TOTAL
-  loading.value = false
+  loadPage(currentPage.value + 1, keyword.value)
 }
 
 const onVisibleChange = async (visible) => {
   if (visible) {
     // 首次展开时加载第一页
     if (optionList.value.length === 0) {
-      await loadNextPage()
+      await loadPage(0, keyword.value)
     }
     // 绑定滚动事件到下拉面板
     await nextTick()
     bindScroll()
   } else {
     unbindScroll()
-    // 关闭后重置，下次打开重新加载
-    optionList.value = []
-    currentPage.value = 0
-    hasMore.value = true
   }
 }
 
@@ -112,6 +137,14 @@ const unbindScroll = () => {
     scrollEl = null
   }
 }
+
+// 挂载时带父组件传入的 searchValue 进行初始搜索
+onMounted(async () => {
+  if (props.searchValue) {
+    keyword.value = props.searchValue
+    await loadPage(0, props.searchValue)
+  }
+})
 </script>
 
 <style scoped>
