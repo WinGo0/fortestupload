@@ -18,7 +18,11 @@
     "echarts": "^6.0.0",
     "element-plus": "^2.7.8",
     "lodash": "^4.17.21",
-    "vue": "^3.2.13"
+    "luckyexcel": "^1.0.1",
+    "luckysheet": "^2.1.13",
+    "socket.io-client": "^4.8.3",
+    "vue": "^3.2.13",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.2.4",
