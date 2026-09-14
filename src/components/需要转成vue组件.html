@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>报警看板 - Socket.IO Demo</title>
+    <!-- Socket.IO 客户端 CDN 4.7.2(与服务端 netty-socketio 2.0.x 协议兼容) -->
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7fa; color: #333; }
+        /* 顶栏:连接状态 + 操作按钮 */
+        .header { background: #fff; padding: 14px 24px; display: flex; align-items: center; gap: 14px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08); position: sticky; top: 0; z-index: 10; flex-wrap: wrap; }
+        .header h1 { font-size: 20px; }
+        /* 心跳心形图标:连接正常=红色完整心(带跳动动画),断开=裂开两半的心 */
+        .heart-icon { width: 28px; height: 28px; flex-shrink: 0; }
+        /* 默认(未连接)显示裂开心,隐藏完整心 */
+        .heart-full { display: none; }
+        .heart-broken { display: block; }
+        /* 连接成功后:显示完整心并启用心跳动画 */
+        body.connected .heart-full { display: block; animation: heartbeat 1.2s ease-in-out infinite; }
+        body.connected .heart-broken { display: none; }
+        @keyframes heartbeat {
+            0%, 100% { transform: scale(1); }
+            25% { transform: scale(1.18); }
+            40% { transform: scale(1); }
+            60% { transform: scale(1.12); }
+        }
+        .conn-text { font-size: 14px; color: #666; }
+        .status-msg { font-size: 13px; color: #1a73e8; }
+        .last-update { font-size: 13px; color: #999; margin-left: auto; }
+        .btn { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;
+            background: #1a73e8; color: #fff; }
+        .btn:hover { opacity: .85; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        /* 次级按钮:测试断开用 */
+        .btn-secondary { background: #6c757d; }
+        /* 表格区域:限高滚动,表头吸顶 */
+        .table-wrap { margin: 16px 24px; background: #fff; border-radius: 8px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.08); max-height: calc(100vh - 160px); overflow-y: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        thead th { position: sticky; top: 0; background: #fafafa; padding: 12px 16px; text-align: left;
+            font-size: 14px; border-bottom: 1px solid #e5e7eb; z-index: 5; }
+        tbody td { padding: 12px 16px; font-size: 14px; border-bottom: 1px solid #f0f1f3; }
+        tbody tr:hover { background: #f8faff; }
+        /* 级别徽章:1红 2橙 3黄;状态徽章:1红 2蓝 3绿 */
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px; color: #fff; }
+        .level-1 { background: #d93025; }
+        .level-2 { background: #f29900; }
+        .level-3 { background: #f2c94c; color: #5f4200; }
+        .status-1 { background: #d93025; }
+        .status-2 { background: #1a73e8; }
+        .status-3 { background: #34a853; }
+        .empty { text-align: center; color: #999; padding: 32px 0; }
+        @media (max-width: 640px) {
+            .table-wrap { margin: 8px; }
+            .header { padding: 10px 12px; }
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    <h1>实时报警看板</h1>
+    <!-- 完整红心:仅连接正常时显示(body.connected) -->
+    <svg class="heart-icon heart-full" viewBox="0 0 24 24" aria-label="连接正常">
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="#d93025"/>
+    </svg>
+    <!-- 裂心:断开/未连接时显示,灰色整心 + 白色闪电裂纹 -->
+    <svg class="heart-icon heart-broken" viewBox="0 0 24 24" aria-label="连接断开">
+        <title>连接断开</title>
+        <!-- 灰色整心:与红色跳动心同形,仅颜色区分状态 -->
+        <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" fill="#9ca3af"/>
+        <!-- 闪电状裂纹:用白色描边模拟裂痕(位于白色顶栏上) -->
+        <polyline points="12,3.4 10.7,5.6 13.1,7.4 11,9.6 12.9,11.6 10.9,13.8 12.8,15.8 11.1,17.8 12.7,19.8 12,20.9"
+                  fill="none" stroke="#fff" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span id="connText" class="conn-text">未连接</span>
+    <button id="refreshBtn" class="btn" disabled>手动刷新</button>
+    <!-- 测试用:一键断开/重连,验证心形状态切换 -->
+    <button id="disconnectBtn" class="btn btn-secondary">模拟断开</button>
+    <span id="statusMsg" class="status-msg"></span>
+    <span id="lastUpdate" class="last-update"></span>
+</div>
+<div id="tableWrap" class="table-wrap">
+    <table>
+        <thead>
+        <tr>
+            <th>ID</th>
+            <th>报警标题</th>
+            <th>级别</th>
+            <th>状态</th>
+            <th>创建时间</th>
+        </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+    </table>
+</div>
+<script>
+    const LEVEL_TEXT = {1: '紧急', 2: '重要', 3: '一般'};
+    const STATUS_TEXT = {1: '未确认', 2: '处理中', 3: '已确认', 4: '已消报'};
+
+    const connDot = document.getElementById('connDot');
+    const connText = document.getElementById('connText');
+    const statusMsg = document.getElementById('statusMsg');
+    const lastUpdate = document.getElementById('lastUpdate');
+    const refreshBtn = document.getElementById('refreshBtn');
+    const disconnectBtn = document.getElementById('disconnectBtn');
+    const tableWrap = document.getElementById('tableWrap');
+    const tbody = document.getElementById('tbody');
+
+    /** 更新连接状态:切换 body class 控制心形显示(完整心/裂开心) */
+    function setConnected(connected) {
+        document.body.classList.toggle('connected', connected);
+        document.body.classList.toggle('disconnected', !connected);
+        connText.textContent = connected ? '已连接' : '未连接';
+        refreshBtn.disabled = !connected;
+        if (connected) statusMsg.textContent = '';
+    }
+
+    /** 防 XSS:渲染前转义标题等文本内容 */
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
+    /** 全量渲染;用 requestAnimationFrame 保持滚动位置,避免刷新时跳动 */
+    function render(records) {
+        const prevTop = tableWrap.scrollTop;
+        const rows = records.map(function (r) {
+            return '<tr>' +
+                '<td>' + r.id + '</td>' +
+                '<td>' + escapeHtml(r.title) + '</td>' +
+                '<td><span class="badge level-' + r.level + '">' + (LEVEL_TEXT[r.level] || r.level) + '</span></td>' +
+                '<td><span class="badge status-' + r.status + '">' + (STATUS_TEXT[r.status] || r.status) + '</span></td>' +
+                '<td>' + escapeHtml(r.createTime) + '</td>' +
+                '</tr>';
+        }).join('');
+        tbody.innerHTML = rows || '<tr><td colspan="5" class="empty">暂无报警记录</td></tr>';
+        requestAnimationFrame(function () { tableWrap.scrollTop = prevTop; });
+        lastUpdate.textContent = '更新于 ' + new Date().toLocaleTimeString();
+    }
+
+    /* 建立 Socket.IO 连接:query 独立传递静态 token + userId + powerId + unitId
+       token 负责握手认证,userId/powerId/unitId 为业务标识(入房路由与日志);
+       创建时配置一次,自动重连会携带同一份 query 重新握手,无需额外处理 */
+    const socket = io('ws://localhost:9092', {
+        transports: ['websocket'],
+        query: { token: 'demo-token', userId: 'zhangsan', powerId: 'plant-01', unitId: 'unit-01' }
+    });
+
+    socket.on('connect', function () {
+        setConnected(true);
+        statusMsg.textContent = '连接成功,sessionId=' + socket.id;
+    });
+    socket.on('disconnect', function () {
+        setConnected(false);
+        statusMsg.textContent = '连接已断开,自动重连中...';
+    });
+    socket.on('connect_error', function (err) {
+        setConnected(false);
+        statusMsg.textContent = '连接失败: ' + err.message;
+    });
+
+    /* 服务端按房间定向推送(事件名不带维度,收到的数据一定是本电厂+机组的):直接全量渲染 */
+    socket.on('alarm:board:update', function (payload) {
+        const json = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        render((json && json.data) || []);
+    });
+
+    /* 手动刷新:调用后端 REST 接口触发立即广播 */
+    refreshBtn.onclick = async function () {
+        try {
+            const resp = await fetch('/api/alarm/mock/refresh');
+            const res = await resp.json();
+            statusMsg.textContent = res.message || '已刷新';
+        } catch (e) {
+            statusMsg.textContent = '刷新失败: ' + e.message;
+        }
+    };
+
+    /* 测试按钮:手动断开(socket.disconnect 不会触发自动重连)/ 重新连接 */
+    disconnectBtn.onclick = function () {
+        if (socket.connected) {
+            socket.disconnect();
+            statusMsg.textContent = '已手动断开(模拟异常),心形应裂开';
+        } else {
+            socket.connect();
+            statusMsg.textContent = '正在重新连接...';
+        }
+    };
+</script>
+</body>
+</html>
