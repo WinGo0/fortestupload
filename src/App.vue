@@ -68,6 +68,7 @@ import ExpressionRuleTest from './components/ExpressionRuleTest.vue'
   width: 100%;
   height: 100vh;
   overflow: auto;
+  background: #f0f2f5;
 }
 
 @media (max-width: 700px) {
