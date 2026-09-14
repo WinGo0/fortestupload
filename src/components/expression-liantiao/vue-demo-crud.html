@@ -72,6 +72,12 @@
             });
             const targetStateModel = computed({ get: () => props.node?.targetState ?? 1, set: (v) => emitRuleUpdate('targetState', v) });
 
+            // 🎯 新增：开关量开/关范围绑定
+            const openRangeStartModel = computed({ get: () => props.node?.openRangeStart ?? null, set: (v) => emitRuleUpdate('openRangeStart', v) });
+            const openRangeEndModel = computed({ get: () => props.node?.openRangeEnd ?? null, set: (v) => emitRuleUpdate('openRangeEnd', v) });
+            const closeRangeStartModel = computed({ get: () => props.node?.closeRangeStart ?? null, set: (v) => emitRuleUpdate('closeRangeStart', v) });
+            const closeRangeEndModel = computed({ get: () => props.node?.closeRangeEnd ?? null, set: (v) => emitRuleUpdate('closeRangeEnd', v) });
+
             // 🎯 时间值上限：秒/分≤59，时≤24，日≤2
             const timeMax = computed(() => {
                 const unit = props.node?.timeUnit;
@@ -90,6 +96,7 @@
             return {
                 exprTypeModel, parameterModel, operatorModel, comparisonValueModel,
                 timeValueModel, timeUnitModel, targetStateModel, timeMax,
+                openRangeStartModel, openRangeEndModel, closeRangeStartModel, closeRangeEndModel, // 🎯 暴露新增的范围绑定
                 handlePromote, handleRemove, handleAddRule, handleToggle, handleOpenParam
             };
         },
@@ -150,15 +157,35 @@
                     <span class="prefix-text">进入工况段</span>
                   </template>
 
+                  <!-- 🎯 修改：开关量配置，新增开/关范围，且状态选择改为下拉框 -->
                   <template v-else-if="exprTypeModel === 'SWITCH'">
-                    <span class="prefix-text">当实时值为</span>
-                    <el-input-number v-model="targetStateModel" :controls="false" :min="0" :max="1" size="large" style="width: 60px;" />
-                    <span class="prefix-text">，持续</span>
+                    <!-- 新增：开和关的范围配置 -->
+                    <span class="prefix-text">开:</span>
+                    <el-input-number v-model="openRangeStartModel" :controls="false" placeholder="下限" size="large" style="width: 80px;" />
+                    <span class="prefix-text">—</span>
+                    <el-input-number v-model="openRangeEndModel" :controls="false" placeholder="上限" size="large" style="width: 80px;" />
+
+                    <span class="prefix-text" style="margin-left: 10px;">关:</span>
+                    <el-input-number v-model="closeRangeStartModel" :controls="false" placeholder="下限" size="large" style="width: 80px;" />
+                    <span class="prefix-text">—</span>
+                    <el-input-number v-model="closeRangeEndModel" :controls="false" placeholder="上限" size="large" style="width: 80px;" />
+
+                    <div style="flex-basis: 100%; height: 0;"></div> <!-- 强制换行，模拟图一的布局 -->
+
+                    <!-- 新增：状态选择下拉框（开=1，关=0） -->
+                    <span class="prefix-text">当为</span>
+                    <el-select v-model="targetStateModel" placeholder="请选择" style="width: 80px;" size="large">
+                      <el-option label="开" :value="1" />
+                      <el-option label="关" :value="0" />
+                    </el-select>
+                    <span class="prefix-text">时，持续</span>
+
                     <el-input-number v-model="timeValueModel" :controls="false" :min="1" :precision="0" :max="timeMax" size="large" style="width: 60px;" />
                     <el-select v-model="timeUnitModel" style="width: 70px;" size="large">
                       <el-option label="秒" value="SECOND" /><el-option label="分" value="MINUTE" /><el-option label="时" value="HOUR" /><el-option label="日" value="DAY" />
                     </el-select>
-                    <span class="prefix-text">进入工况</span>
+
+                    <span class="prefix-text">进入工况段</span>
                   </template>
 
                   <template v-else>
@@ -203,7 +230,12 @@
                 threshold: null,
                 timeValue: 1,
                 timeUnit: 'SECOND',
-                targetState: 1
+                targetState: 1,
+                // 🎯 新增：开关量范围的默认初始化
+                openRangeStart: null,
+                openRangeEnd: null,
+                closeRangeStart: null,
+                closeRangeEnd: null
             });
 
             const createDefaultRoot = () => ({
