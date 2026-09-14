@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>规则引擎配置 - CRUD 与字段回填试验</title>
+    <link rel="stylesheet" href="https://unpkg.com/element-plus@2.4.4/dist/index.css" />
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, 'PingFang SC', Arial, sans-serif; background-color: #f0f2f5; padding: 20px; }
+        #app { max-width: 1200px; margin: 0 auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 12px 0 rgba(0,0,0,0.1); }
+        .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+        .rule-group-container { display: flex; background-color: rgba(64, 158, 255, 0.05); border: 1px dashed #dcdfe6; padding: 12px; margin-top: 8px; border-radius: 4px; }
+        .connector-area { display: flex; flex-direction: column; align-items: center; margin-right: 15px; }
+        .vertical-line-filler { flex-grow: 1; width: 2px; background-color: #409EFF; margin: 8px 0; }
+        .rows-area { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+        .row-item { width: 100%; }
+        .row-item.is-in-group { position: relative; padding-left: 20px; }
+        .row-item.is-in-group::before { content: ''; position: absolute; left: 0; top: 20px; transform: translateY(-50%); width: 20px; height: 2px; background-color: #409EFF; }
+        .input-with-buttons-container { display: flex; align-items: center; width: 100%; }
+        .structured-rule-container { display: flex; align-items: center; gap: 8px; width: 100%; flex-wrap: wrap; background: #fff; padding: 10px; border-radius: 4px; border: 1px solid #ebeef5; }
+        .prefix-text { font-size: 14px; color: #606266; white-space: nowrap; }
+        .action-buttons { display: flex; gap: 8px; margin-left: 8px; }
+        .param-list { display: flex; flex-direction: column; gap: 8px; }
+        .param-item { padding: 10px 15px; border: 1px solid #dcdfe6; border-radius: 4px; cursor: pointer; transition: all 0.2s; display: flex; justify-content: space-between; align-items: center; }
+        .param-item:hover { border-color: #409EFF; background-color: #ecf5ff; color: #409EFF; }
+        .param-desc { color: #909399; font-size: 12px; }
+    </style>
+</head>
+<body>
+<div id="app">
+    <rule-builder></rule-builder>
+</div>
+
+<script src="https://unpkg.com/vue@3.4.21/dist/vue.global.js"></script>
+<script src="https://unpkg.com/element-plus@2.4.4/dist/index.full.js"></script>
+
+<script>
+    const { createApp, ref, computed, onMounted, defineComponent } = Vue;
+
+    const API = '/api/expression-config';
+
+    // ================= 1. RuleNode 组件（数据模型与后端 ExpressionNodeDTO 完全同构） =================
+    const RuleNode = defineComponent({
+        name: 'RuleNode',
+        props: {
+            node: { type: Object, required: true },
+            path: { type: Array, required: true },
+            isInGroup: { type: Boolean, default: false }
+        },
+        emits: ['promote-to-group', 'add-rule-to-group', 'remove-node', 'toggle-operator', 'update-node-value', 'open-param-select'],
+        setup(props, { emit }) {
+            const emitRuleUpdate = (field, value) => {
+                emit('update-node-value', { path: props.path, field, value });
+            };
+
+            const exprTypeModel = computed({ get: () => props.node?.type ?? 'REAL_TIME', set: (v) => emitRuleUpdate('type', v) });
+            const parameterModel = computed({ get: () => props.node?.paramCode ?? '', set: (v) => emitRuleUpdate('paramCode', v) });
+            const operatorModel = computed({ get: () => props.node?.operator ?? 'GT', set: (v) => emitRuleUpdate('operator', v) });
+            const comparisonValueModel = computed({ get: () => props.node?.threshold ?? null, set: (v) => emitRuleUpdate('threshold', v) });
+            const timeValueModel = computed({ get: () => props.node?.timeValue ?? 1, set: (v) => emitRuleUpdate('timeValue', v) });
+            // 🎯 切换时间单位时，若当前时间值超出新单位上限，自动校正到上限
+            const timeUnitModel = computed({
+                get: () => props.node?.timeUnit ?? 'SECOND',
+                set: (v) => {
+                    emitRuleUpdate('timeUnit', v);
+                    const limits = { SECOND: 59, MINUTE: 59, HOUR: 24, DAY: 2 };
+                    const tv = props.node?.timeValue;
+                    if (tv != null && limits[v] != null && tv > limits[v]) {
+                        emitRuleUpdate('timeValue', limits[v]);
+                    }
+                }
+            });
+            const targetStateModel = computed({ get: () => props.node?.targetState ?? 1, set: (v) => emitRuleUpdate('targetState', v) });
+
+            // 🎯 时间值上限：秒/分≤59，时≤24，日≤2
+            const timeMax = computed(() => {
+                const unit = props.node?.timeUnit;
+                if (unit === 'HOUR') return 24;
+                if (unit === 'DAY') return 2;
+                if (unit === 'MINUTE' || unit === 'SECOND') return 59;
+                return undefined;
+            });
+
+            const handlePromote = () => { emit('promote-to-group', props.path); };
+            const handleRemove = () => { emit('remove-node', props.path); };
+            const handleAddRule = () => { emit('add-rule-to-group', props.path); };
+            const handleToggle = () => { emit('toggle-operator', props.path); };
+            const handleOpenParam = () => { emit('open-param-select', props.path); };
+
+            return {
+                exprTypeModel, parameterModel, operatorModel, comparisonValueModel,
+                timeValueModel, timeUnitModel, targetStateModel, timeMax,
+                handlePromote, handleRemove, handleAddRule, handleToggle, handleOpenParam
+            };
+        },
+        template: `
+          <div class="node-container">
+            <div v-if="node.nodeType === 'LOGIC_NODE'" class="rule-group-container">
+              <div v-if="node.children && node.children.length > 1" class="connector-area">
+                <el-button type="primary" circle @click="handleToggle">
+                  {{ node.logicOperator === 'AND' ? '且' : '或' }}
+                </el-button>
+                <div class="vertical-line-filler"></div>
+                <el-button type="primary" plain circle @click="handleAddRule">+</el-button>
+              </div>
+              <div class="rows-area">
+                <div v-for="(childNode, index) in node.children" :key="index">
+                  <rule-node
+                      :node="childNode"
+                      :path="[...path, index]"
+                      :is-in-group="node.children.length > 1"
+                      @promote-to-group="(p) => $emit('promote-to-group', p)"
+                      @add-rule-to-group="(p) => $emit('add-rule-to-group', p)"
+                      @remove-node="(p) => $emit('remove-node', p)"
+                      @toggle-operator="(p) => $emit('toggle-operator', p)"
+                      @update-node-value="(e) => $emit('update-node-value', e)"
+                      @open-param-select="(p) => $emit('open-param-select', p)"
+                  ></rule-node>
+                </div>
+              </div>
+            </div>
+
+            <div v-else-if="node.nodeType === 'CONDITION_NODE'" class="row-item" :class="{'is-in-group': isInGroup}">
+              <div class="input-with-buttons-container">
+                <div class="structured-rule-container">
+                  <el-select v-model="exprTypeModel" placeholder="选择类型" style="width: 110px;" size="large">
+                    <el-option label="当前值" value="REAL_TIME" />
+                    <el-option label="变化率" value="CHANGE_RATE" />
+                    <el-option label="变化幅度" value="CHANGE_AMOUNT" />
+                    <el-option label="开关量" value="SWITCH" />
+                  </el-select>
+
+                  <el-input v-model="parameterModel" placeholder="请选择参数" readonly size="large" style="width: 180px;">
+                    <template #append>
+                      <el-button @click.stop="handleOpenParam">🔍</el-button>
+                    </template>
+                  </el-input>
+
+                  <template v-if="exprTypeModel === 'CHANGE_AMOUNT'">
+                    <span class="prefix-text">在</span>
+                    <el-input-number v-model="timeValueModel" :controls="false" :min="1" :precision="0" :max="timeMax" size="large" style="width: 60px;" />
+                    <el-select v-model="timeUnitModel" style="width: 70px;" size="large">
+                      <el-option label="秒" value="SECOND" /><el-option label="分" value="MINUTE" /><el-option label="时" value="HOUR" /><el-option label="日" value="DAY" />
+                    </el-select>
+                    <span class="prefix-text">内，|E末 - E初|</span>
+                    <el-select v-model="operatorModel" placeholder="符号" style="width: 80px;" size="large">
+                      <el-option label=">" value="GT" /><el-option label="<" value="LT" /><el-option label="=" value="EQ" /><el-option label=">=" value="GTE" /><el-option label="<=" value="LTE" />
+                    </el-select>
+                    <el-input-number v-model="comparisonValueModel" :controls="false" placeholder="阈值" size="large" style="width: 100px;" />
+                    <span class="prefix-text">进入工况段</span>
+                  </template>
+
+                  <template v-else-if="exprTypeModel === 'SWITCH'">
+                    <span class="prefix-text">当实时值为</span>
+                    <el-input-number v-model="targetStateModel" :controls="false" :min="0" :max="1" size="large" style="width: 60px;" />
+                    <span class="prefix-text">，持续</span>
+                    <el-input-number v-model="timeValueModel" :controls="false" :min="1" :precision="0" :max="timeMax" size="large" style="width: 60px;" />
+                    <el-select v-model="timeUnitModel" style="width: 70px;" size="large">
+                      <el-option label="秒" value="SECOND" /><el-option label="分" value="MINUTE" /><el-option label="时" value="HOUR" /><el-option label="日" value="DAY" />
+                    </el-select>
+                    <span class="prefix-text">进入工况</span>
+                  </template>
+
+                  <template v-else>
+                    <template v-if="exprTypeModel === 'CHANGE_RATE'">
+                      <span class="prefix-text">在</span>
+                      <el-input-number v-model="timeValueModel" :controls="false" :min="1" :precision="0" :max="timeMax" size="large" style="width: 60px;" />
+                      <el-select v-model="timeUnitModel" style="width: 70px;" size="large">
+                        <el-option label="秒" value="SECOND" /><el-option label="分" value="MINUTE" /><el-option label="时" value="HOUR" /><el-option label="日" value="DAY" />
+                      </el-select>
+                      <span class="prefix-text">内，变化率</span>
+
+                    </template>
+                    <template v-else>
+                      <span class="prefix-text">的当前值处于</span>
+                    </template>
+                    <el-select v-model="operatorModel" placeholder="符号" style="width: 80px;" size="large">
+                      <el-option label=">" value="GT" /><el-option label="<" value="LT" /><el-option label="=" value="EQ" /><el-option label=">=" value="GTE" /><el-option label="<=" value="LTE" />
+                    </el-select>
+                    <el-input-number v-model="comparisonValueModel" :controls="false" placeholder="阈值" size="large" style="width: 100px;" />
+                  </template>
+                </div>
+
+                <div class="action-buttons">
+                  <el-button type="primary" circle @click="handlePromote">+</el-button>
+                  <el-button type="danger" circle @click="handleRemove">-</el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+        `
+    });
+
+    // ================= 2. RuleBuilder 组件（含 CRUD 与字段回填） =================
+    const RuleBuilder = defineComponent({
+        name: 'RuleBuilder',
+        setup() {
+            const createNewRuleNode = () => ({
+                nodeType: 'CONDITION_NODE',
+                type: 'REAL_TIME',
+                paramCode: '',
+                operator: 'GT',
+                threshold: null,
+                timeValue: 1,
+                timeUnit: 'SECOND',
+                targetState: 1
+            });
+
+            const createDefaultRoot = () => ({
+                nodeType: 'LOGIC_NODE',
+                logicOperator: 'AND',
+                children: [createNewRuleNode()]
+            });
+
+            const rootGroup = ref(createDefaultRoot());
+
+            // ===== CRUD 状态 =====
+            const currentId = ref(null);
+            const configName = ref('');
+            const remark = ref('');
+            const configList = ref([]);
+
+            // ===== 弹窗状态 =====
+            const dialogVisible = ref(false);
+            const targetParamPath = ref([]);
+            // 🎯 mock 参数列表：改为从后端 /params 接口加载
+            const paramOptions = ref([]);
+
+            // 🎯 加载参数列表（弹窗打开前已就绪）
+            const loadParams = async () => {
+                try {
+                    const res = await fetch(`${API}/params`);
+                    if (res.ok) {
+                        paramOptions.value = await res.json();
+                    }
+                } catch (e) {
+                    console.error('加载参数列表失败', e);
+                }
+            };
+
+            // ================= 树操作（与原页面一致，字段适配 DTO） =================
+            const findNodeContext = (path) => {
+                if (!rootGroup.value || !rootGroup.value.children) return { parentChildren: [], nodeIndex: -1 };
+                let parentChildren = rootGroup.value.children;
+                for (let i = 0; i < path.length - 1; i++) {
+                    if (!parentChildren[path[i]] || !parentChildren[path[i]].children) return { parentChildren: [], nodeIndex: -1 };
+                    parentChildren = parentChildren[path[i]].children;
+                }
+                return { parentChildren, nodeIndex: path[path.length - 1] };
+            };
+
+            const findNodeByPath = (path) => {
+                if (!path) return null;
+                if (path.length === 0) return rootGroup.value;
+                if (!rootGroup.value || !rootGroup.value.children) return null;
+                let currentNode = rootGroup.value;
+                for (const index of path) {
+                    if (!currentNode.children || !currentNode.children[index]) return null;
+                    currentNode = currentNode.children[index];
+                }
+                return currentNode;
+            };
+
+            const addRuleToGroup = (path) => {
+                const groupNode = findNodeByPath(path);
+                if (groupNode && groupNode.nodeType === 'LOGIC_NODE') {
+                    if (!groupNode.children) groupNode.children = [];
+                    groupNode.children.push(createNewRuleNode());
+                }
+            };
+
+            const handleRuleAdditionClick = (path) => {
+                if (path.length === 1 && path[0] === 0 && rootGroup.value.children && rootGroup.value.children.length === 1) {
+                    addRuleToGroup([]);
+                } else {
+                    promoteRuleToGroup(path);
+                }
+            };
+
+            const promoteRuleToGroup = (path) => {
+                const { parentChildren, nodeIndex } = findNodeContext(path);
+                if (!parentChildren || nodeIndex < 0 || !parentChildren[nodeIndex]) return;
+                const ruleToPromote = parentChildren[nodeIndex];
+                const newGroup = { nodeType: 'LOGIC_NODE', logicOperator: 'AND', children: [ruleToPromote, createNewRuleNode()] };
+                parentChildren.splice(nodeIndex, 1, newGroup);
+            };
+
+            const removeNode = (path) => {
+                if (path.length === 1 && rootGroup.value.children && rootGroup.value.children.length === 1) {
+                    ElementPlus.ElMessage.warning("为了保持至少一条规则，无法删除最后一条。");
+                    return;
+                }
+                const { parentChildren, nodeIndex } = findNodeContext(path);
+                if (!parentChildren || nodeIndex < 0) return;
+                parentChildren.splice(nodeIndex, 1);
+
+                const parentPath = path.slice(0, -1);
+                if (parentChildren.length === 1 && parentPath.length > 0) {
+                    const { parentChildren: grandParentChildren, nodeIndex: parentIndexInGrandparent } = findNodeContext(parentPath);
+                    if (!grandParentChildren || parentIndexInGrandparent < 0) return;
+                    const lonelyChild = parentChildren[0];
+                    grandParentChildren.splice(parentIndexInGrandparent, 1, lonelyChild);
+                }
+            };
+
+            const toggleOperator = (path) => {
+                const groupNode = findNodeByPath(path);
+                if (groupNode && groupNode.nodeType === 'LOGIC_NODE') {
+                    groupNode.logicOperator = groupNode.logicOperator === 'AND' ? 'OR' : 'AND';
+                }
+            };
+
+            const updateNodeValue = ({ path, field, value }) => {
+                const targetNode = findNodeByPath(path);
+                if (!targetNode || targetNode.nodeType !== 'CONDITION_NODE') return;
+                targetNode[field] = value;
+            };
+
+            // ===== 参数弹窗 =====
+            const handleOpenParamSelect = (path) => {
+                targetParamPath.value = path;
+                dialogVisible.value = true;
+            };
+
+            const confirmParamSelect = (selectedValue) => {
+                updateNodeValue({ path: targetParamPath.value, field: 'paramCode', value: selectedValue });
+                dialogVisible.value = false;
+                ElementPlus.ElMessage.success('参数已选择');
+            };
+
+            // ================= CRUD：新增 / 查询 / 编辑（回填） / 保存 / 删除 =================
+
+            const loadList = async () => {
+                const res = await fetch(`${API}/list`);
+                configList.value = await res.json();
+            };
+
+            // 新增：清空 currentId，重置默认树（字段全部归位）
+            const handleCreate = () => {
+                currentId.value = null;
+                configName.value = '';
+                remark.value = '';
+                rootGroup.value = JSON.parse(JSON.stringify(createDefaultRoot()));
+                ElementPlus.ElMessage.success('已进入新增模式，请编辑后保存');
+            };
+
+            // 查询 + 编辑回填：detail 返回的 config 树深拷贝后整体替换 rootGroup
+            const handleEdit = async (row) => {
+                const res = await fetch(`${API}/detail?id=${row.id}`);
+                const data = await res.json();
+                if (!data.config) {
+                    ElementPlus.ElMessage.error('未查询到配置: ' + row.id);
+                    return;
+                }
+                currentId.value = row.id;
+                configName.value = row.configName;
+                remark.value = row.remark;
+                rootGroup.value = JSON.parse(JSON.stringify(data.config));
+                ElementPlus.ElMessage.success(`配置 ${row.id} 已回填，请编辑后保存`);
+            };
+
+            // 保存：currentId 为空走新增，否则走更新
+            const handleSave = async () => {
+                if (!configName.value) {
+                    ElementPlus.ElMessage.warning('请填写配置名称');
+                    return;
+                }
+                const payload = {
+                    id: currentId.value,
+                    configName: configName.value,
+                    remark: remark.value,
+                    configJson: rootGroup.value
+                };
+                const res = await fetch(`${API}/save`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    ElementPlus.ElMessage.error(data.message || '保存失败');
+                    return;
+                }
+                currentId.value = data.id;
+                ElementPlus.ElMessage.success('保存成功，id = ' + data.id);
+                loadList();
+            };
+
+            const handleDelete = async (row) => {
+                const res = await fetch(`${API}/${row.id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    ElementPlus.ElMessage.success('删除成功');
+                    if (currentId.value === row.id) {
+                        handleCreate();
+                    }
+                    loadList();
+                }
+            };
+
+            // 🎯 查询描述：调用后端 /description 接口，弹窗展示表达式中文描述
+            const handleQueryDescription = async (row) => {
+                const res = await fetch(`${API}/description?id=${row.id}`);
+                const data = await res.json();
+                if (!res.ok) {
+                    ElementPlus.ElMessage.error(data.message || '查询描述失败');
+                    return;
+                }
+                ElementPlus.ElMessageBox.alert(data.description || '暂无描述', `配置 ${row.id}（${row.configName}）的表达式描述`, { confirmButtonText: '确定' });
+            };
+
+            const logDataToConsole = () => {
+                console.log(JSON.stringify(rootGroup.value, null, '  '));
+                ElementPlus.ElMessage.success('配置已输出到控制台');
+            };
+
+            onMounted(() => {
+                loadList();
+                loadParams();
+            });
+
+            return {
+                rootGroup, handleRuleAdditionClick, addRuleToGroup, removeNode, toggleOperator, updateNodeValue,
+                logDataToConsole, dialogVisible, targetParamPath, paramOptions, handleOpenParamSelect, confirmParamSelect,
+                currentId, configName, remark, configList, handleCreate, handleEdit, handleSave, handleDelete, handleQueryDescription
+            };
+        },
+        template: `
+          <div>
+            <h3 style="margin: 0 0 1rem;">规则引擎配置（CRUD + 字段回填试验）</h3>
+
+            <div class="toolbar">
+              <el-button type="success" @click="handleCreate">新增配置</el-button>
+              <el-input v-model="configName" placeholder="配置名称" style="width: 200px;" size="large" />
+              <el-input v-model="remark" placeholder="备注" style="width: 200px;" size="large" />
+              <el-button type="primary" @click="handleSave">{{ currentId ? '保存（编辑）' : '保存（新增）' }}</el-button>
+              <el-button @click="logDataToConsole">控制台输出当前树</el-button>
+              <el-tag v-if="currentId" type="warning">当前编辑配置 ID: {{ currentId }}</el-tag>
+              <el-tag v-else type="info">新增模式</el-tag>
+            </div>
+
+            <el-table :data="configList" border size="small" style="margin-bottom: 1rem;">
+              <el-table-column prop="id" label="ID" width="80" />
+              <el-table-column prop="configName" label="配置名称" />
+              <el-table-column prop="remark" label="备注" />
+              <el-table-column prop="updatedTime" label="更新时间" width="180" />
+              <el-table-column label="操作" width="240">
+                <template #default="scope">
+                  <el-button type="primary" size="small" @click="handleEdit(scope.row)">编辑回填</el-button>
+                  <el-button type="danger" size="small" @click="handleDelete(scope.row)">删除</el-button>
+                  <el-button type="warning" size="small" @click="handleQueryDescription(scope.row)">查询描述</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <div>
+              <rule-node
+                  v-if="rootGroup && rootGroup.children"
+                  :node="rootGroup"
+                  :path="[]"
+                  @promote-to-group="handleRuleAdditionClick"
+                  @add-rule-to-group="addRuleToGroup"
+                  @remove-node="removeNode"
+                  @toggle-operator="toggleOperator"
+                  @update-node-value="updateNodeValue"
+                  @open-param-select="handleOpenParamSelect"
+              ></rule-node>
+            </div>
+
+            <el-dialog v-model="dialogVisible" title="请选择参数" width="400px" append-to-body>
+              <div class="param-list" v-if="paramOptions.length">
+                <div
+                    class="param-item"
+                    v-for="item in paramOptions"
+                    :key="item.paramCode"
+                    @click="confirmParamSelect(item.paramCode)"
+                >
+                  <span>
+                    <b>{{ item.paramCode }}</b> {{ item.paramName }}
+                    <span class="param-desc">（{{ item.desc }}）</span>
+                  </span>
+                  <span style="color: #409EFF;">选择</span>
+                </div>
+              </div>
+              <el-empty v-else description="暂无参数，请确认后端 /api/expression-config/params 接口可用" />
+            </el-dialog>
+          </div>
+        `
+    });
+
+    // ================= 3. 挂载 =================
+    const App = defineComponent({
+        components: { RuleBuilder },
+        template: `<rule-builder></rule-builder>`
+    });
+
+    const app = createApp(App);
+    app.use(ElementPlus);
+    app.component('RuleNode', RuleNode);
+    app.mount('#app');
+</script>
+</body>
+</html>
