@@ -1,10 +1,11 @@
 <template>
   <div class="app-shell">
-    <!-- 当前展示 Socket.IO 实时报警看板组件 -->
-    <SocketIoAlarmBoard />
+    <!-- 当前展示表达式规则组件测试 -->
+    <ExpressionRuleTest />
 
     <!--
       其他演示组件已注释，需要恢复时取消对应 import 和模板即可：
+      <SocketIoAlarmBoard />
       <LuckysheetPivot1 />
       <PollingDashboard v-if="demoMode === 'before'" />
       <WebSocketDashboard v-else />
@@ -29,8 +30,9 @@
 </template>
 
 <script setup>
-import SocketIoAlarmBoard from './components/SocketIoAlarmBoard.vue'
+import ExpressionRuleTest from './components/ExpressionRuleTest.vue'
 
+// import SocketIoAlarmBoard from './components/SocketIoAlarmBoard.vue'
 // 旧的“自定义透视表”组件保留，方便对照：
 // import LuckysheetPivot1 from './components/LuckysheetPivot1.vue'
 // import LuckysheetPivot from './components/LuckysheetPivot.vue'
