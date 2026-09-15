@@ -28,6 +28,8 @@
 import { ref, watch } from 'vue'; // 引入 watch
 import RuleNode from './RuleNode.vue';
 
+const MAX_NESTING_LEVEL = 4;
+
 // 1. 定义 props 来接收外部传入的初始数据
 const props = defineProps({
   initialData: {
@@ -135,6 +137,11 @@ const handleRuleAdditionClick = (path) => {
 };
 
 const promoteRuleToGroup = (path) => {
+  if (path.length >= MAX_NESTING_LEVEL) {
+    console.warn(`表达式最多支持${MAX_NESTING_LEVEL}层嵌套`);
+    return;
+  }
+
   const { parentChildren, nodeIndex } = findNodeContext(path);
   if (!parentChildren || nodeIndex < 0 || !parentChildren[nodeIndex]) return; // 安全检查
   const ruleToPromote = parentChildren[nodeIndex];
