@@ -36,14 +36,61 @@ const props = defineProps({
   }
 });
 
-// 2. 改造 rootGroup 的初始化逻辑
-const rootGroup = ref({}); // 先初始化为空对象
+const operatorCodeMap = {
+  '>': 'GT',
+  '<': 'LT',
+  '==': 'EQ',
+  '===': 'EQ',
+  '!=': 'NE',
+  '>=': 'GTE',
+  '<=': 'LTE'
+};
 
-// 3. 使用 watch 来监听 props 的变化，并用传入的数据更新内部状态
+const operatorSymbolMap = {
+  GT: '>',
+  LT: '<',
+  EQ: '==',
+  NE: '!=',
+  GTE: '>=',
+  LTE: '<='
+};
+
+const toEditableTree = (node) => {
+  if (!node) return null;
+
+  if (node.nodeType === 'LOGIC_NODE') {
+    return {
+      type: 'group',
+      operator: node.logicOperator === 'OR' ? 'OR' : 'AND',
+      children: (node.children ?? [])
+        .map(toEditableTree)
+        .filter(Boolean)
+    };
+  }
+
+  if (node.nodeType === 'CONDITION_NODE') {
+    return {
+      type: 'rule',
+      value: {
+        parameter: node.paramCode ?? '',
+        operator: operatorSymbolMap[node.operator] ?? node.operator ?? '>',
+        comparisonValue: node.threshold ?? null
+      }
+    };
+  }
+
+  return JSON.parse(JSON.stringify(node));
+};
+
+// 2. 改造 rootGroup 的初始化逻辑
+const rootGroup = ref({});
+
+// 3. 监听父组件数据，同时兼容旧格式和新格式
 watch(() => props.initialData, (newData) => {
   if (newData && typeof newData === 'object') {
-    // 使用深拷贝，避免直接修改 props
-    rootGroup.value = JSON.parse(JSON.stringify(newData));
+    rootGroup.value = toEditableTree(
+      JSON.parse(JSON.stringify(newData))
+    ) ?? {};
   }
 }, { immediate: true, deep: true });
 
@@ -146,16 +193,6 @@ const updateNodeValue = ({ path, field, value }) => {
 };
 
 // --- 数据输出逻辑 ---
-const operatorCodeMap = {
-  '>': 'GT',
-  '<': 'LT',
-  '==': 'EQ',
-  '===': 'EQ',
-  '!=': 'NE',
-  '>=': 'GTE',
-  '<=': 'LTE'
-};
-
 const createNewConditionNode = (value = {}) => ({
   nodeType: 'CONDITION_NODE',
   type: 'REAL_TIME',

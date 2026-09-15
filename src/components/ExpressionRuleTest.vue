@@ -11,24 +11,36 @@ import RuleBuilder from './expression-liantiao/RuleBuilder.vue'
 // import RuleBuilderNew from './expression-liantiao/RuleBuilderNew.vue'
 
 const initialData = {
-  type: 'group',
-  operator: 'AND',
-  children: [
+  "nodeType": "LOGIC_NODE",
+  "logicOperator": "AND",
+  "children": [
     {
-      type: 'rule',
-      value: {
-        parameter: 'temperature',
-        operator: '>',
-        comparisonValue: 30
-      }
+      "nodeType": "CONDITION_NODE",
+      "type": "REAL_TIME",
+      "paramCode": "temperature",
+      "operator": "GT",
+      "threshold": 30,
+      "timeValue": 1,
+      "timeUnit": "SECOND",
+      "targetState": 1,
+      "openRangeStart": null,
+      "openRangeEnd": null,
+      "closeRangeStart": null,
+      "closeRangeEnd": null
     },
     {
-      type: 'rule',
-      value: {
-        parameter: 'pressure',
-        operator: '<',
-        comparisonValue: 100
-      }
+      "nodeType": "CONDITION_NODE",
+      "type": "REAL_TIME",
+      "paramCode": "dsaf",
+      "operator": "EQ",
+      "threshold": 323,
+      "timeValue": 1,
+      "timeUnit": "SECOND",
+      "targetState": 1,
+      "openRangeStart": null,
+      "openRangeEnd": null,
+      "closeRangeStart": null,
+      "closeRangeEnd": null
     }
   ]
 }
