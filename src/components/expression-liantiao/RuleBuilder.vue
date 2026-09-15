@@ -6,7 +6,7 @@
       style="margin-bottom: 1rem; float: right;"
       size="small"
     >
-      在控制台输出配置
+      在控制台输出新格式配置
     </el-button>
     
     <div style="clear: both;">
@@ -71,15 +71,6 @@ const findNodeByPath = (path) => {
     currentNode = currentNode.children[index];
   }
   return currentNode;
-};
-
-const generateUniqueKey = (timestamp) => {
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let randomPart = '';
-  for (let i = 0; i < 5; i++) {
-    randomPart += characters.charAt(Math.floor(Math.random() * characters.length));
-  }
-  return `${timestamp}-${randomPart}`;
 };
 
 const createNewRuleNode = () => ({
@@ -155,75 +146,61 @@ const updateNodeValue = ({ path, field, value }) => {
 };
 
 // --- 数据输出逻辑 ---
-const buildOutputRecursive = (node, currentLevel, timestamp) => {
-  if (!node) return null;
-  if (node.type === 'rule') {
-    const { parameter, operator, comparisonValue } = node.value;
-    if (parameter === undefined || operator === undefined || comparisonValue === undefined || comparisonValue === null) return null;
-    const conditionString = `${parameter} ${operator} ${comparisonValue}`;
-    return {
-      key: generateUniqueKey(timestamp),
-      level: currentLevel,
-      rowValues: { input: conditionString }
-    };
-  }
-  if (node.type === 'group') {
-    const groupLevel = currentLevel;
-    const validChildren = node.children ? node.children
-        .map(child => {
-          if (child.type === 'group') {
-            return buildOutputRecursive(child, groupLevel + 1, timestamp);
-          } else {
-            return buildOutputRecursive(child, groupLevel, timestamp);
-          }
-        })
-        .filter(Boolean) : [];
+const operatorCodeMap = {
+  '>': 'GT',
+  '<': 'LT',
+  '==': 'EQ',
+  '===': 'EQ',
+  '!=': 'NE',
+  '>=': 'GTE',
+  '<=': 'LTE'
+};
 
+const createNewConditionNode = (value = {}) => ({
+  nodeType: 'CONDITION_NODE',
+  type: 'REAL_TIME',
+  paramCode: value.parameter ?? '',
+  operator: operatorCodeMap[value.operator] ?? value.operator ?? 'GT',
+  threshold: value.comparisonValue ?? null,
+  timeValue: 1,
+  timeUnit: 'SECOND',
+  targetState: 1,
+  openRangeStart: null,
+  openRangeEnd: null,
+  closeRangeStart: null,
+  closeRangeEnd: null
+});
+
+const buildNewConfigRecursive = (node) => {
+  if (!node) return null;
+
+  if (node.type === 'rule') {
+    return createNewConditionNode(node.value);
+  }
+
+  if (node.type === 'group') {
     return {
-      key: generateUniqueKey(timestamp),
-      level: groupLevel,
-      type: node.operator === 'AND' ? 1 : 2,
-      operator: node.operator,
-      children: validChildren
+      nodeType: 'LOGIC_NODE',
+      logicOperator: node.operator === 'OR' ? 'OR' : 'AND',
+      children: (node.children ?? [])
+        .map(buildNewConfigRecursive)
+        .filter(Boolean)
     };
   }
+
   return null;
 };
 
-const logDataToConsole = () => {
-  if (!rootGroup.value || !rootGroup.value.children || rootGroup.value.children.length === 0) {
-    console.log("没有可输出的内容。");
-    return;
-  }
-  const hasContent = rootGroup.value.children.some(child => {
-      if (child.type === 'group') return child.children && child.children.length > 0;
-      const { parameter, operator, comparisonValue } = child.value;
-      return parameter && operator && comparisonValue !== null && comparisonValue !== undefined;
-  });
-  if (!hasContent) {
-     console.log("没有可输出的内容（所有输入均为空或不完整）。");
-     return;
-  }
+const buildNewConfig = () => buildNewConfigRecursive(rootGroup.value);
 
-  const timestamp = Date.now();
-  if (rootGroup.value.children.length === 1 && rootGroup.value.children[0].type === 'rule') {
-    const singleRuleNode = rootGroup.value.children[0];
-    const { parameter, operator, comparisonValue } = singleRuleNode.value;
-    const conditionString = `${parameter} ${operator} ${comparisonValue}`;
-    const output = {
-      key: generateUniqueKey(timestamp),
-      level: 0,
-      rowValues: { input: conditionString }
-    };
-    console.log(JSON.stringify(output, null, '  '));
-  } else {
-    const output = buildOutputRecursive(rootGroup.value, 1, timestamp);
-    console.log(JSON.stringify(output, null, '  '));
-  }
+const logDataToConsole = () => {
+  const output = buildNewConfig();
+  console.log(JSON.stringify(output, null, '  '));
 };
 
-// 4. 暴露 rootGroup 以便父组件通过 ref 获取
+// 4. 暴露内部树和转换后的新格式，父组件可直接获取用于提交
 defineExpose({
-  rootGroup
+  rootGroup,
+  getConfig: buildNewConfig
 });
 </script>
