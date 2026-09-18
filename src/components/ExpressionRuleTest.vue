@@ -8,7 +8,7 @@
 
 <script setup>
 import RuleBuilder from './expression-liantiao/RuleBuilder.vue'
-// import RuleBuilderNew from './expression-liantiao/RuleBuilderNew.vue'
+import RuleBuilderNew from './expression-liantiao/RuleBuilderNew.vue'
 
 const initialData = {
   "nodeType": "LOGIC_NODE",

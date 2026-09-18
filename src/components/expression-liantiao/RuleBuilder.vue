@@ -237,9 +237,47 @@ const buildNewConfigRecursive = (node) => {
 
 const buildNewConfig = () => buildNewConfigRecursive(rootGroup.value);
 
+const hasParamValue = (value) =>
+  value !== null && value !== undefined && String(value).trim() !== '';
+
+const removeEmptyParamExpressions = (node) => {
+  if (!node || typeof node !== 'object') return null;
+
+  if (node.nodeType === 'CONDITION_NODE') {
+    return hasParamValue(node.paramCode) ? node : null;
+  }
+
+  if (node.nodeType === 'LOGIC_NODE') {
+    return {
+      ...node,
+      children: (node.children ?? [])
+        .map(removeEmptyParamExpressions)
+        .filter(Boolean)
+    };
+  }
+
+  return node;
+};
+
+const countConditionNodes = (node) => {
+  if (!node || typeof node !== 'object') return 0;
+  if (node.nodeType === 'CONDITION_NODE') return 1;
+  if (node.nodeType !== 'LOGIC_NODE') return 0;
+
+  return (node.children ?? []).reduce(
+    (count, child) => count + countConditionNodes(child),
+    0
+  );
+};
+
 const logDataToConsole = () => {
   const output = buildNewConfig();
-  console.log(JSON.stringify(output, null, '  '));
+  const printableOutput =
+    countConditionNodes(output) > 1
+      ? removeEmptyParamExpressions(output)
+      : output;
+
+  console.log(JSON.stringify(printableOutput, null, '  '));
 };
 
 // 4. 暴露内部树和转换后的新格式，父组件可直接获取用于提交

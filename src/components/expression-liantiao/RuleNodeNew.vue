@@ -48,7 +48,7 @@
           <el-input
             v-model="parameterModel"
             placeholder="请选择参数"
-            readonly
+            
             size="large"
             style="width: 180px"
           >
