@@ -1,7 +1,8 @@
 <template>
   <div class="app-shell">
     <!-- 当前展示表达式规则组件测试 -->
-    <ExpressionRuleTest />
+    <!-- <ExpressionRuleTest /> -->
+    <SchemeStepDrawer />
 
     <!--
       其他演示组件已注释，需要恢复时取消对应 import 和模板即可：
@@ -30,7 +31,8 @@
 </template>
 
 <script setup>
-import ExpressionRuleTest from './components/ExpressionRuleTest.vue'
+// import ExpressionRuleTest from './components/ExpressionRuleTest.vue'
+import SchemeStepDrawer from './components/SchemeStepDrawer.vue'
 
 // import SocketIoAlarmBoard from './components/SocketIoAlarmBoard.vue'
 // 旧的“自定义透视表”组件保留，方便对照：
