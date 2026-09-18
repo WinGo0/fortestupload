@@ -1,35 +1,40 @@
 <template>
-  <div class="drawer-page">
-    <section class="drawer-panel">
-      <header class="drawer-header">
+  <BaseDrawer>
+    <template #header>
+      <div class="drawer-header">
         <span class="drawer-title">方案 BGK-FA-20260917000002</span>
         <el-button>取消</el-button>
-      </header>
-
-      <div class="drawer-content">
-        <el-steps :active="stepActive" simple class="step-bar">
-          <el-step title="方案基本信息" />
-          <el-step title="前置条件配置" />
-          <el-step title="监控项设置" />
-          <el-step title="退出及操作" />
-        </el-steps>
-
-        <el-form
-          ref="formRef"
-          :model="formModel"
-          :rules="formRules"
-          label-width="150px"
-          class="scheme-form"
-        >
-          <div v-show="stepActive === 0" class="step-panel">
-            <el-form-item label="方案名称" prop="schemeName">
-              <el-input v-model="formModel.schemeName" placeholder="请输入方案名称" />
-            </el-form-item>
-          </div>
-        </el-form>
       </div>
+    </template>
 
-      <footer class="drawer-footer">
+    <div class="drawer-content" width="300">
+      <el-steps :active="stepActive" simple style="margin-bottom: 15px">
+        <el-step title="方案基本信息" />
+        <el-step title="前置条件配置" />
+        <el-step title="监控项设置" />
+        <el-step title="退出及操作" />
+      </el-steps>
+
+      <el-form
+        :model="formModel"
+        label-width="150"
+        ref="formRef"
+        :rules="formRules"
+      >
+        <div v-show="stepActive === 0">
+          <el-form-item label="方案名称" prop="schemeName">
+            <el-input v-model="formModel.schemeName" placeholder="请输入方案名称" />
+          </el-form-item>
+        </div>
+
+        <div v-show="stepActive === 1"></div>
+        <div v-show="stepActive === 2"></div>
+        <div v-show="stepActive === 3"></div>
+      </el-form>
+    </div>
+
+    <template #footer>
+      <div class="drawer-footer">
         <el-button :disabled="stepActive === 0" @click="handleStepJump(-1)">
           上一步
         </el-button>
@@ -40,13 +45,14 @@
         >
           下一步
         </el-button>
-      </footer>
-    </section>
-  </div>
+      </div>
+    </template>
+  </BaseDrawer>
 </template>
 
 <script setup>
 import { reactive, ref } from 'vue'
+import BaseDrawer from './BaseDrawer.vue'
 
 const stepActive = ref(0)
 const formRef = ref()
@@ -91,20 +97,6 @@ const handleStepJump = async (pace) => {
 </script>
 
 <style scoped>
-.drawer-page {
-  min-height: 100vh;
-  box-sizing: border-box;
-  padding: 24px;
-  background: #f0f2f5;
-}
-
-.drawer-panel {
-  display: flex;
-  min-height: calc(100vh - 48px);
-  flex-direction: column;
-  background: #fff;
-}
-
 .drawer-header {
   display: flex;
   align-items: center;
@@ -120,21 +112,10 @@ const handleStepJump = async (pace) => {
 }
 
 .drawer-content {
-  flex: 1;
-  padding: 28px 24px;
-}
-
-.step-bar {
-  margin-bottom: 36px;
-}
-
-.scheme-form {
-  max-width: 760px;
-  margin: 0 auto;
-}
-
-.step-panel {
-  min-height: 160px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 300px;
+  padding: 24px;
 }
 
 .drawer-footer {
