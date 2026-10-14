@@ -1,5 +1,5 @@
 <template>
-  <div class="monitor-wrap">
+  <div class="monitor-wrap" @click="closeContextMenu">
     <div class="monitor-title">{{ vcConfigName }} 监控页面</div>
     <div class="container-chart" v-loading="chartLoading">
       <StackedLineGraph
@@ -184,20 +184,111 @@
         </el-tab-pane>
       </el-tabs>
     </div>
-    <!-- 原项目 ParamDrawer 组件不存在，先注释： -->
-    <!-- <ParamDrawer
-      v-if="paramDetailShow"
-      :selectData="paramDetailData"
-      @drawerClose="paramDetailClose"
-      disabled
-    /> -->
+    <ContextMenu
+      v-if="showMenu"
+      :items="menuItems"
+      :position="menuPosition"
+      @select="handleContextMenuSelect"
+    />
 
-    <!-- 原项目 ProgramDetailDrawer 组件不存在，先注释： -->
-    <!-- <ProgramDetailDrawer
-      v-if="programDetailShow"
-      @drawerClose="programDetailClose"
-      :id="programId"
-    /> -->
+    <el-drawer
+      v-model="paramDetailShow"
+      title="参数信息"
+      size="420px"
+      append-to-body
+      destroy-on-close
+      @closed="paramDetailClose"
+    >
+      <div class="detail-body">
+        <el-descriptions
+          v-if="paramDetailData"
+          :column="1"
+          border
+          label-width="110px"
+        >
+          <el-descriptions-item label="参数编码">
+            {{ paramDetailData.paramCode }}
+          </el-descriptions-item>
+          <el-descriptions-item label="参数名称">
+            {{ paramDetailData.paramName || "-" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="所属阶段">
+            第{{ paramDetailData.stageOrder }}阶段
+          </el-descriptions-item>
+          <el-descriptions-item label="参数单位">
+            {{ paramDetailData.paramUnit || "无" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="参考值">
+            {{ paramDetailData.baseline ?? "-" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="上下限">
+            {{ paramDetailData.lowerLimit ?? "-" }} ~
+            {{ paramDetailData.upperLimit ?? "-" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="报警状态">
+            <el-tag :type="paramDetailData.hasAlarm ? 'danger' : 'success'">
+              {{ paramDetailData.hasAlarm ? "报警" : "正常" }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="参数说明">
+            {{ paramDetailData.description || "-" }}
+          </el-descriptions-item>
+        </el-descriptions>
+        <el-empty v-else description="暂无参数信息" :image-size="72" />
+      </div>
+    </el-drawer>
+
+    <el-drawer
+      v-model="programDetailShow"
+      title="方案配置"
+      size="620px"
+      append-to-body
+      destroy-on-close
+      @closed="programDetailClose"
+    >
+      <div v-if="currentProgram" class="detail-body program-detail">
+        <el-descriptions :column="2" border label-width="96px">
+          <el-descriptions-item label="方案名称" :span="2">
+            {{ currentProgram.vcConfigName }}
+          </el-descriptions-item>
+          <el-descriptions-item label="方案ID">
+            {{ currentProgram.id }}
+          </el-descriptions-item>
+          <el-descriptions-item label="规程编码">
+            {{ currentProgram.procedureCode || procedureId || "-" }}
+          </el-descriptions-item>
+          <el-descriptions-item label="阶段数量">
+            {{ stagedParamList.length }}
+          </el-descriptions-item>
+          <el-descriptions-item label="参数数量">
+            {{ paramList.length }}
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <el-collapse class="program-detail__stages" accordion>
+          <el-collapse-item
+            v-for="stage in stagedParamList"
+            :key="stage.stageOrder"
+            :name="stage.stageOrder"
+            :title="`第${stage.stageOrder}阶段（${stage.params.length} 个参数）`"
+          >
+            <el-table :data="stage.params" size="small" border>
+              <el-table-column prop="paramCode" label="参数编码" min-width="150" />
+              <el-table-column prop="paramName" label="参数名称" min-width="140" />
+              <el-table-column prop="paramUnit" label="单位" width="80" />
+              <el-table-column label="状态" width="80">
+                <template #default="{ row }">
+                  <el-tag :type="row.hasAlarm ? 'danger' : 'success'" size="small">
+                    {{ row.hasAlarm ? "报警" : "正常" }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+      <el-empty v-else description="暂无方案信息" :image-size="72" />
+    </el-drawer>
 
     <el-dialog
       :before-close="handleClose"
@@ -248,41 +339,21 @@ import {
 import { groupBy, orderBy, values, map, isEqual } from "lodash";
 // import { downLoadFileByUrl } from "@/utils";
 // import AlarmList from "./components/alarmList.vue";
-/*
 import {
   queryVcConfigParams,
   batchGetParamDataWithTimeRange,
   queryVcConfigByProcedureCode,
-  batchQueryParamsDataByProcedureId,
   batchPullParamsDataWithCertainRate,
-} from "@/api/variable";
-import { getParamDetail } from "@/api/steadyStateConditions";
-import { ParamsTimeData, RegulationParamsList } from "@/types/variable.d";
-import { useGlobalStore } from "@/stores/globalState";
-import { useRefreshRequest } from "@/composables/common/useRefreshRequest";
+  getParamDetail,
+} from "@/mock/monitor";
 import { useRoute } from "vue-router";
-import ParamDrawer from "@/views/configManagement/paramService/components/addDrawer.vue";
-import ProgramDetailDrawer from "@/views/programManagement/variableConditions/components/detailDrawer.vue";
+import { Operation } from "@element-plus/icons-vue";
 import ContextMenu from "@/components/contextMenu.vue";
-import { Operation } from "@element-plus/icons-vue";
-import { FormDetailData } from "@/types/paramService";
-*/
-import { useRoute } from "vue-router";
-import { Operation } from "@element-plus/icons-vue";
 
 // 原项目类型文件不存在，使用兼容类型避免脚本报错。
 type ParamsTimeData = any;
 type RegulationParamsList = any;
 type FormDetailData = any;
-
-// 原项目接口文件不存在，使用空数据请求占位，保持原有调用结构。
-const emptyRequest = async () => ({ data: [] });
-const queryVcConfigParams = emptyRequest;
-const batchGetParamDataWithTimeRange = emptyRequest;
-const queryVcConfigByProcedureCode = emptyRequest;
-const batchQueryParamsDataByProcedureId = emptyRequest;
-const batchPullParamsDataWithCertainRate = emptyRequest;
-const getParamDetail = async () => ({ data: null });
 
 // 原项目 refresh 组合式函数不存在，先留空，避免初始化时报错。
 const useRefreshRequest = () => undefined;
@@ -303,7 +374,7 @@ const StackedLineGraph = defineAsyncComponent(
 // const globalStore = useGlobalStore();
 // const { refreshTimer, timeOptions } = storeToRefs(globalStore);
 const refreshTimer = ref(5000);
-const timeOptions = ref<string[]>([]);
+const timeOptions = ref<string[]>(["近1小时", "近6小时", "近24小时"]);
 const unitId = ref(localStorage.getItem("unitCode") || "");
 
 const route = useRoute();
@@ -322,8 +393,13 @@ const axisMax = ref();
 const procedureId = computed(() => {
   return route.query.procedureId as string;
 });
+const currentProgram = computed(() =>
+  proparamList.value?.find((item) => item.id === programId.value),
+);
 const vcConfigName = computed(() => {
-  return route.query.vcConfigName as string;
+  const routeName = route.query.vcConfigName as string;
+
+  return routeName || currentProgram.value?.vcConfigName || "变工况方案";
 });
 
 const paramCodes = computed(() => {
@@ -414,6 +490,7 @@ const menuItems = [
     },
   },
 ];
+
 const showContextMenu = (e, item, flag) => {
   console.log("showContextMenu", e, item);
   menuPosition.value = {
@@ -422,19 +499,15 @@ const showContextMenu = (e, item, flag) => {
   };
   showMenu.value = true;
   currentContextParam.value = item;
-  // getParamData(
-  //   item.paramCode,
-  //   item.paramName,
-  //   item.upperLimit,
-  //   item.lowerLimit,
-  //   flag,
-  //   item.id,
-  // );
 };
 
 const closeContextMenu = () => {
   showMenu.value = false;
-  // currentContextParam.value = null;
+};
+
+const handleContextMenuSelect = (item: any) => {
+  closeContextMenu();
+  item.action?.();
 };
 
 const handleSetCoordinate = () => {
@@ -627,6 +700,9 @@ const handleSearchProgrameList = async () => {
     } else {
       // 从报警记录来的
       programId.value = Number(route.query.id);
+      if (!Number.isFinite(programId.value)) {
+        programId.value = proparamList.value?.[0]?.id || "";
+      }
     }
     // await getParamList(true);
   } catch (error) {
@@ -677,7 +753,7 @@ onMounted(async () => {
 
   .container-chart {
     position: relative;
-    height: 80vh;
+    height: 60vh;
     margin-top: 25px;
     padding-right: 10px;
 
