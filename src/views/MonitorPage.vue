@@ -443,6 +443,7 @@ const activeStage = ref("");
 const lastActiveStage = ref("");
 const paramList = ref<any[]>([]);
 const selectedParamCodes = ref<any[]>([]);
+const MAX_LEFT_AXIS_PARAM_COUNT = 5;
 // 参数详情抽屉
 const paramDetailShow = ref<boolean>(false);
 // 参数详情数据
@@ -595,15 +596,23 @@ useRefreshRequest({
   },
 });
 
-const handleSelectParamBox = (item) => {
+const handleSelectParamBox = async (item) => {
   console.log("handleSelectParamBox", item);
   if (!selectedParamCodes.value.includes(item.paramCode)) {
+    if (
+      !referenceParamCode.value &&
+      selectedParamCodes.value.length >= MAX_LEFT_AXIS_PARAM_COUNT
+    ) {
+      ElMessage.warning("最多只能选择5个，请先取消一个已选项后再添加");
+      return;
+    }
     selectedParamCodes.value.push(item.paramCode);
   } else {
     selectedParamCodes.value = selectedParamCodes.value.filter(
       (it) => it !== item.paramCode,
     );
   }
+  await getParamsTimeDataByProcedureId(false);
 };
 
 //根据参数的状态修改class
@@ -620,10 +629,13 @@ const getVcMosaicStatus = (item) => {
 
 // 根据所选阶段设置已选paramCodes
 const setSelectedParamCodes = () => {
-  selectedParamCodes.value =
+  const paramCodes =
     stagedParamList.value
       .find((it) => it.stageOrder === activeStage.value)
       ?.params?.map((ele) => ele.paramCode) || [];
+  selectedParamCodes.value = referenceParamCode.value
+    ? paramCodes
+    : paramCodes.slice(0, MAX_LEFT_AXIS_PARAM_COUNT);
 };
 
 // 收缩栏始终有一个打开
@@ -631,9 +643,9 @@ const handleCollapseChange = async (value) => {
   console.log("handleCollapseChange", value, activeStage.value);
   if (value !== "" && value !== undefined && value !== null) {
     lastActiveStage.value = value;
-    setSelectedParamCodes();
     referenceParamCode.value = null;
     resetReferenceAxis();
+    setSelectedParamCodes();
     await getParamsTimeDataByProcedureId(false);
     return;
   }
@@ -673,6 +685,11 @@ async function getParamList(isFirst?: boolean) {
 
 // 根据规程ID批量查询参数的时序数据
 const getParamsTimeDataByProcedureId = async (isFirst) => {
+  if (!selectedParamCodes.value.length) {
+    timeDataList.value = [];
+    chartLoading.value = false;
+    return;
+  }
   try {
     chartLoading.value = true;
     // const res = await batchQueryParamsDataByProcedureId({

@@ -171,6 +171,17 @@ const STAGE_TEMPLATES = [
         hasAlarm: true,
         decimals: 2,
       },
+      {
+        paramCode: "2-LT-206",
+        paramName: "凝汽器水位",
+        paramUnit: "mm",
+        baseline: 760,
+        amplitude: 25,
+        lowerLimit: 650,
+        upperLimit: 850,
+        hasAlarm: false,
+        decimals: 1,
+      },
     ],
   },
   {
