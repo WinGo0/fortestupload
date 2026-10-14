@@ -61,6 +61,8 @@ const props = withDefaults(
     scene?: string;
     legendSelected?: boolean;
     referenceParamCode?: string;
+    mainAxisMin?: number | string | null;
+    mainAxisMax?: number | string | null;
     selectedParamCodes?: string[];
     height?: number;
     width?: number;
@@ -134,16 +136,31 @@ const hasMainAxis = computed(() =>
   Boolean(props.referenceParamCode && referenceItem.value),
 );
 
+const toFiniteNumber = (value: unknown) => {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+};
+
+const mainAxisMin = computed(() => toFiniteNumber(props.mainAxisMin));
+const mainAxisMax = computed(() => toFiniteNumber(props.mainAxisMax));
+const hasValidMainRange = computed(
+  () =>
+    hasMainAxis.value &&
+    mainAxisMin.value !== null &&
+    mainAxisMax.value !== null &&
+    mainAxisMin.value < mainAxisMax.value,
+);
+
 const mainUnit = computed(
   () => referenceItem.value?.paramUnit ?? rawUnitList.value?.[0] ?? undefined,
 );
 
 const unitList = computed(() => {
   if (!hasMainAxis.value) return rawUnitList.value;
-  return [
-    mainUnit.value,
-    ...rawUnitList.value.filter((unit) => unit !== mainUnit.value),
-  ];
+  // 参考坐标系模式下仅保留右侧参考Y轴，其余左侧Y轴不再展示，
+  // 其余参数的曲线通过 unitAxisIndexMap 回落到索引 0 共用该轴。
+  return [mainUnit.value];
 });
 
 // 当前工程使用 ECharts 6；空数据时保留一根占位轴，避免 yAxis 为空报错。
@@ -288,40 +305,47 @@ const calculateChartOption = () => {
         },
       },
     },
-    yAxis: displayUnitList.value.map((unit, index) => ({
-      type: "value",
-      name: formatYAxis(unit),
-      // 只有1条y轴且未设置为参考坐标系时默认左边展示，设置为参考坐标系右边展示
-      position: hasMainAxis.value && index === 0 ? "right" : "left",
-      offset: hasMainAxis.value
-        ? index <= 1
-          ? 0
-          : (index - 1) * yAxisSpace
-        : index * yAxisSpace,
-      alignTicks: true,
-      axisLine: {
-        show: false, // 显示Y轴轴线（竖线）
-      },
-      axisTick: {
-        show: false, // 确保刻度线可见（默认就是 true，无需显式配置）
-      },
-      axisLabel: {
-        rotate: 0,
-        margin: 10,
-        showMinLabel: true,
-        showMaxLabel: true,
-        color: defaultAxisLabelColor,
-        // color: unit
-        //   ? defaultAxisLabelColor
-        //   : noUnitColorMap.value.get(unit) || defaultAxisLabelColor,
-        formatter: (value) => formatYAxisLabel(value),
-      },
-      nameTextStyle: {
-        color: defaultAxisLabelColor,
-        align: index === 0 && hasMainAxis.value ? "left" : "right",
-        padding: index === 0 && hasMainAxis.value ? [0, 0, 0, 8] : [0, 8, 0, 0],
-      },
-    })),
+    yAxis: displayUnitList.value.map((unit, index) => {
+      const isMainAxis = hasMainAxis.value && index === 0;
+      return {
+        type: "value",
+        name: formatYAxis(unit),
+        // 只有1条y轴且未设置为参考坐标系时默认左边展示，设置为参考坐标系右边展示
+        position: isMainAxis ? "right" : "left",
+        offset: hasMainAxis.value
+          ? index <= 1
+            ? 0
+            : (index - 1) * yAxisSpace
+          : index * yAxisSpace,
+        // 未手动设置范围时由 ECharts 自动缩放，保证共轴的各条曲线都能显示
+        ...(isMainAxis && hasValidMainRange.value
+          ? { min: mainAxisMin.value, max: mainAxisMax.value }
+          : {}),
+        alignTicks: false,
+        axisLine: {
+          show: false, // 显示Y轴轴线（竖线）
+        },
+        axisTick: {
+          show: false, // 确保刻度线可见（默认就是 true，无需显式配置）
+        },
+        axisLabel: {
+          rotate: 0,
+          margin: 10,
+          showMinLabel: true,
+          showMaxLabel: true,
+          color: defaultAxisLabelColor,
+          // color: unit
+          //   ? defaultAxisLabelColor
+          //   : noUnitColorMap.value.get(unit) || defaultAxisLabelColor,
+          formatter: (value) => formatYAxisLabel(value),
+        },
+        nameTextStyle: {
+          color: defaultAxisLabelColor,
+          align: isMainAxis ? "left" : "right",
+          padding: isMainAxis ? [0, 0, 0, 8] : [0, 8, 0, 0],
+        },
+      };
+    }),
     // yAxis: seriesData?.map((item: any, index) => {
     //   const dataList =
     //     !isNil(item.lowerLimit) && !isNil(item.upperLimit)
@@ -374,6 +398,8 @@ const calculateChartOption = () => {
       name: legends.value[index],
       type: "line",
       yAxisIndex: unitAxisIndexMap.value.get(it.paramUnit) ?? 0,
+      clip: true,
+      connectNulls: false,
       // stack: "Total",
       // data: it.dataList?.map((ele) => ele.value) || [],
       data:
@@ -490,7 +516,9 @@ const calculateChartOption = () => {
   console.log("stackedLineGraph options", options, echartsInstance.value);
   chartOption.value = { ...options };
   if (!echartsInstance.value) return;
-  echartsInstance.value.setOption(chartOption.value);
+  echartsInstance.value.setOption(chartOption.value, {
+    replaceMerge: ["yAxis", "series"],
+  });
   if (!props.legendSelected) {
     nextTick(() => {
       setLegendByParamCodes();
@@ -535,6 +563,8 @@ watch(
   [
     () => props.data,
     () => props.referenceParamCode,
+    () => props.mainAxisMin,
+    () => props.mainAxisMax,
     () => props.selectedParamCodes,
   ],
   async (

@@ -9,6 +9,8 @@
         :legendSelected="false"
         :referenceParamCode="referenceParamCode"
         :selectedParamCodes="selectedParamCodes"
+        :mainAxisMin="referenceAxisMin"
+        :mainAxisMax="referenceAxisMax"
         class="line-graph"
       >
         <template #header>
@@ -348,6 +350,8 @@ import {
 } from "@/mock/monitor";
 import { useRoute } from "vue-router";
 import { Operation } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
+import Decimal from "decimal.js";
 import ContextMenu from "@/components/contextMenu.vue";
 
 // 原项目类型文件不存在，使用兼容类型避免脚本报错。
@@ -389,6 +393,30 @@ const proparamList = ref();
 const setAxisVisiable = ref(false);
 const axisMin = ref();
 const axisMax = ref();
+const referenceAxisMin = ref<number | null>(null);
+const referenceAxisMax = ref<number | null>(null);
+
+// 用 Decimal 精确解析 Y 轴范围，避免浮点误差
+const toAxisDecimal = (value: unknown) => {
+  if (value === "" || value === null || value === undefined) return null;
+  try {
+    const decimal = new Decimal(value as Decimal.Value);
+    // 保留原有“必须是有限 number”的约束：超出 double 范围的值旧代码会被拒绝，
+    // 这里同样拒绝，避免 Decimal 放行后传给图表变成 Infinity 被静默忽略。
+    return decimal.isFinite() && Number.isFinite(decimal.toNumber())
+      ? decimal
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+const resetReferenceAxis = () => {
+  referenceAxisMin.value = null;
+  referenceAxisMax.value = null;
+  axisMin.value = "";
+  axisMax.value = "";
+};
 
 const procedureId = computed(() => {
   return route.query.procedureId as string;
@@ -512,7 +540,11 @@ const handleContextMenuSelect = (item: any) => {
 
 const handleSetCoordinate = () => {
   console.log("handleSetCoordinate");
-  referenceParamCode.value = currentContextParam.value.paramCode;
+  const nextParamCode = currentContextParam.value.paramCode;
+  if (referenceParamCode.value !== nextParamCode) {
+    resetReferenceAxis();
+  }
+  referenceParamCode.value = nextParamCode;
 };
 
 const handleShowParamDetail = async () => {
@@ -601,6 +633,7 @@ const handleCollapseChange = async (value) => {
     lastActiveStage.value = value;
     setSelectedParamCodes();
     referenceParamCode.value = null;
+    resetReferenceAxis();
     await getParamsTimeDataByProcedureId(false);
     return;
   }
@@ -668,7 +701,10 @@ const handleCommand = (command, index) => {
   console.log("handleCommand", command, index, chartRef.value, instance);
 
   if (command === "setAxis") {
-    // handleTimeChange();
+    axisMin.value =
+      referenceAxisMin.value === null ? "" : String(referenceAxisMin.value);
+    axisMax.value =
+      referenceAxisMax.value === null ? "" : String(referenceAxisMax.value);
     setAxisVisiable.value = true;
   }
   if (command === "refresh") {
@@ -711,13 +747,29 @@ const handleSearchProgrameList = async () => {
 };
 
 const handleClose = () => {
-  axisMin.value = "";
-  axisMax.value = "";
+  axisMin.value =
+    referenceAxisMin.value === null ? "" : String(referenceAxisMin.value);
+  axisMax.value =
+    referenceAxisMax.value === null ? "" : String(referenceAxisMax.value);
   setAxisVisiable.value = false;
 };
 const handleConfirm = () => {
-  axisMin.value = "";
-  axisMax.value = "";
+  const min = toAxisDecimal(axisMin.value);
+  const max = toAxisDecimal(axisMax.value);
+
+  if (!min || !max) {
+    ElMessage.error("请输入有效的 Y 轴最小值和最大值");
+    return;
+  }
+  if (min.gte(max)) {
+    ElMessage.error("Y 轴最小值必须小于最大值");
+    return;
+  }
+
+  referenceAxisMin.value = min.toNumber();
+  referenceAxisMax.value = max.toNumber();
+  axisMin.value = min.toString();
+  axisMax.value = max.toString();
   setAxisVisiable.value = false;
 };
 
