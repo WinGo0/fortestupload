@@ -704,7 +704,17 @@ const getParamsTimeDataByProcedureId = async (isFirst) => {
       order: "paramUnit",
     });
 
-    timeDataList.value = res?.data || [];
+    timeDataList.value = (res?.data || []).map((item) => ({
+      ...item,
+      ...(item.startIndex !== undefined && item.endIndex !== undefined
+        ? {
+            markarea: {
+              startIndex: item.startIndex,
+              endIndex: item.endIndex,
+            },
+          }
+        : {}),
+    }));
   } catch (e) {
     console.log(e);
     chartLoading.value = false;

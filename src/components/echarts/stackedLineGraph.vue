@@ -124,6 +124,18 @@ const echartsStyle = computed(() => {
 const chartOption = ref<ECOption>({});
 const selectedLegends = ref<string[]>([]);
 
+const getMarkArea = (item) => {
+  const area = item.markarea ?? item.markArea;
+  if (!area) return;
+  const startTime = item.dataList?.[area.startIndex]?.timeStr;
+  const endTime = item.dataList?.[area.endIndex]?.timeStr;
+  if (!startTime || !endTime) return;
+  return {
+    itemStyle: { color: "rgba(255,173,177,0.4)" },
+    data: [[{ xAxis: new Date(startTime) }, { xAxis: new Date(endTime) }]],
+  };
+};
+
 const rawUnitList = computed(() => {
   const units = Array.from(new Set(props.data.map((it) => it.paramUnit)));
   return units.length ? units : [];
@@ -408,6 +420,7 @@ const calculateChartOption = () => {
           ?.sort((a, b) => getTimeValue(a.timeStr) - getTimeValue(b.timeStr))
           ?.map((ele) => [new Date(ele.timeStr), ele.value]) || [],
       // colorBy: "data",
+      markArea: getMarkArea(it),
       markLine:
         seriesData?.length == 1 &&
         !isNil(it.lowerLimit) &&
