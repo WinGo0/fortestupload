@@ -13,7 +13,16 @@
           <el-input v-model="formData.title" placeholder="请输入标题" />
         </el-form-item>
 
-        <el-form-item label="内容" prop="content">
+        <el-form-item label="病例内容编辑" prop="content" label-width="120px">
+          <div style="width: 100%; margin-bottom: 10px">
+            <el-radio-group
+              v-model="showTemplate"
+              @change="handleTemplateChange"
+            >
+              <el-radio :value="true">显示模板</el-radio>
+              <el-radio :value="false">不显示模板</el-radio>
+            </el-radio-group>
+          </div>
           <!-- wangEditor编辑器 -->
           <div style="border: 1px solid #ccc">
             <Toolbar
@@ -97,6 +106,7 @@
 import { ref, shallowRef, onBeforeUnmount } from 'vue'
 import '@wangeditor/editor/dist/css/style.css'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
+import { SlateTransforms } from '@wangeditor/editor'
 import * as XLSX from 'xlsx'
 import { Upload } from '@element-plus/icons-vue'
 import request from '../utils/request'
@@ -107,6 +117,8 @@ import {
   ElForm,
   ElFormItem,
   ElInput,
+  ElRadio,
+  ElRadioGroup,
   ElMessage
 } from 'element-plus'
 
@@ -122,10 +134,104 @@ const fileInputRef = ref(null)
 // 上传状态
 const uploading = ref(false)
 
+// 图中“机组异常通报及分析记录单”模板
+const TEMPLATE_HTML = `
+<table style="width: 100%; border-collapse: collapse; table-layout: fixed;">
+  <tbody>
+    <tr>
+      <td colspan="6" style="border: 1px solid #000; padding: 7px 8px; text-align: center;">
+        <strong>机组异常通报及分析记录单</strong>
+      </td>
+    </tr>
+    <tr>
+      <td style="width: 18%; border: 1px solid #000; padding: 6px 8px; text-align: center;">病历卡编号</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">1#JZYC2026071101</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">故障名称</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">维修后试验过程中1WCF103PO（鼓网反冲洗水泵3）泵驱动端轴承温度高</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">故障系统/设备</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">1WCF103PO（鼓网反冲洗水泵3）</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">发生时间</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">2026-09-18 00:00:00</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">机组信息</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">1号机组&nbsp;&nbsp;模式1</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">故障现象</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">2026年07月11日中班，当班值执行1WCF103PO（鼓网反冲洗水泵3）维修后试验过程</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">风险分析及后果影响</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">即时干预行动</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">后续行动建议</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">即时决策</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">事件原因分析</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">工作申请号</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">信息通报人</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">值长</td>
+      <td colspan="5" style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td rowspan="3" style="border: 1px solid #000; padding: 6px 8px; text-align: center;">维修响应人员</td>
+      <td style="width: 14%; border: 1px solid #000; padding: 6px 8px; text-align: center;">部门</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">姓名</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+    <tr>
+      <td style="border: 1px solid #000; padding: 6px 8px; text-align: center;">联系方式</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+      <td style="border: 1px solid #000; padding: 6px 8px;">&nbsp;</td>
+    </tr>
+  </tbody>
+</table>
+`.replace(/>\s+</g, '><').trim()
+
+// 是否显示模板
+const showTemplate = ref(true)
+
 // 表单数据
 const formData = ref({
   title: '',
-  content: '', // 富文本内容，存储HTML字符串
+  content: TEMPLATE_HTML, // 富文本内容，存储HTML字符串
   summary: ''
 })
 
@@ -378,6 +484,7 @@ const toggleFullScreen = () => {
 
 // 编辑器配置
 const editorConfig = {
+  autoFocus: false,
   placeholder: '请输入内容...',
   MENU_CONF: {
     // 上传图片配置
@@ -408,6 +515,24 @@ const editorConfig = {
   }
 }
 
+function handleTemplateChange() {
+  const editor = editorRef.value
+  if (!editor) return
+
+  if (showTemplate.value) {
+    // setHtml 会整体替换内容，不会把模板嵌套进已有表格
+    editor.setHtml(TEMPLATE_HTML)
+  } else {
+    editor.clear()
+    editor.deselect()
+    for (let index = editor.children.length - 1; index >= 0; index--) {
+      if (editor.children[index]?.type === 'table') {
+        SlateTransforms.removeNodes(editor, { at: [index] })
+      }
+    }
+  }
+}
+
 // 编辑器创建完成后的回调
 const handleCreated = (editor) => {
   editorRef.value = editor
@@ -423,7 +548,9 @@ const handleSubmit = async () => {
 
     // 获取编辑器内容（双重保障，虽然v-model已经绑定了）
     if (editorRef.value) {
-      formData.value.content = editorRef.value.getHtml()
+      formData.value.content = editorRef.value.isEmpty()
+        ? ''
+        : editorRef.value.getHtml()
     }
 
     // 构建提交参数
@@ -481,16 +608,21 @@ const handleSubmit = async () => {
 // 预览内容
 const handlePreview = () => {
   if (editorRef.value) {
-    formData.value.content = editorRef.value.getHtml()
+    formData.value.content = editorRef.value.isEmpty()
+      ? ''
+      : editorRef.value.getHtml()
   }
   showPreview.value = true
 }
 
 // 重置表单
 const handleReset = () => {
+  showTemplate.value = true
   formRef.value?.resetFields()
   if (editorRef.value) {
-    editorRef.value.clear()
+    editorRef.value.setHtml(TEMPLATE_HTML)
+  } else {
+    formData.value.content = TEMPLATE_HTML
   }
   showParams.value = false
   showPreview.value = false
@@ -498,6 +630,7 @@ const handleReset = () => {
 
 // 加载示例数据（用于测试）
 const handleLoadData = () => {
+  showTemplate.value = false
   formData.value = {
     title: '示例文章标题',
     content: '<p>这是一段<strong>示例内容</strong>，用于测试富文本编辑器。</p><p>支持<em>多种格式</em>，包括：</p><ul><li>列表项1</li><li>列表项2</li></ul>',
@@ -520,8 +653,16 @@ onBeforeUnmount(() => {
 <style scoped>
 .rich-text-editor {
   max-width: 1200px;
+  height: 100%;
   margin: 0 auto;
   padding: 20px;
+  box-sizing: border-box;
+  overflow: auto;
+}
+
+.rich-text-editor :deep(.table-container) {
+  border: 0;
+  padding: 0;
 }
 
 .card-header {

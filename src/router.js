@@ -1,6 +1,9 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import MonitorPage from './views/MonitorPage.vue'
+import RecipientGroupPage from './views/RecipientGroupPage.vue'
 
+// 其他演示组件暂不参与路由，需要时再取消注释：
+import RichTextEditor from './components/RichTextEditor.vue'
+// import MonitorPage from './views/MonitorPage.vue'
 // 旧演示页和其他页面暂不参与路由，需要时再取消注释：
 // import StackedLineGraphDemo from './views/StackedLineGraphDemo.vue'
 // import CountdownPage from './countdown/CountdownPage.vue'
@@ -9,11 +12,21 @@ import MonitorPage from './views/MonitorPage.vue'
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    // {
+    //   path: '/',
+    //   name: 'recipient-group',
+    //   component: RecipientGroupPage,
+    // },
     {
       path: '/',
-      name: 'monitor-page',
-      component: MonitorPage,
+      name: 'rich-text-editor',
+      component: RichTextEditor,
     },
+    // {
+    //   path: '/monitor',
+    //   name: 'monitor-page',
+    //   component: MonitorPage,
+    // },
     // {
     //   path: '/stacked-line-graph',
     //   name: 'stacked-line-graph',
