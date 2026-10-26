@@ -106,7 +106,7 @@
 import { ref, shallowRef, onBeforeUnmount } from 'vue'
 import '@wangeditor/editor/dist/css/style.css'
 import { Editor, Toolbar } from '@wangeditor/editor-for-vue'
-import { SlateTransforms } from '@wangeditor/editor'
+import { SlateEditor, SlateTransforms } from '@wangeditor/editor'
 import * as XLSX from 'xlsx'
 import { Upload } from '@element-plus/icons-vue'
 import request from '../utils/request'
@@ -519,17 +519,17 @@ function handleTemplateChange() {
   const editor = editorRef.value
   if (!editor) return
 
-  if (showTemplate.value) {
-    // setHtml 会整体替换内容，不会把模板嵌套进已有表格
-    editor.setHtml(TEMPLATE_HTML)
-  } else {
-    editor.clear()
-    editor.deselect()
-    for (let index = editor.children.length - 1; index >= 0; index--) {
-      if (editor.children[index]?.type === 'table') {
-        SlateTransforms.removeNodes(editor, { at: [index] })
-      }
+  editor.clear()
+  editor.deselect()
+  for (let index = editor.children.length - 1; index >= 0; index--) {
+    if (editor.children[index]?.type === 'table') {
+      SlateTransforms.removeNodes(editor, { at: [index] })
     }
+  }
+  SlateTransforms.select(editor, SlateEditor.start(editor, []))
+
+  if (showTemplate.value) {
+    editor.dangerouslyInsertHtml(TEMPLATE_HTML)
   }
 }
 
@@ -660,9 +660,10 @@ onBeforeUnmount(() => {
   overflow: auto;
 }
 
-.rich-text-editor :deep(.table-container) {
+.rich-text-editor :deep(.w-e-text-container [data-slate-editor] .table-container) {
   border: 0;
   padding: 0;
+  box-shadow: none;
 }
 
 .card-header {
