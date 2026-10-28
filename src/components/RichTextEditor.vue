@@ -666,6 +666,16 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
+.rich-text-editor :deep(.w-e-text-container [data-slate-editor] .table-container table) {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.rich-text-editor :deep(.w-e-text-container [data-slate-editor] .table-container td),
+.rich-text-editor :deep(.w-e-text-container [data-slate-editor] .table-container th) {
+  overflow-wrap: anywhere;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;
