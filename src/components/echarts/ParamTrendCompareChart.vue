@@ -64,6 +64,7 @@ const props = withDefaults(
     mainAxisMin?: number | string | null;
     mainAxisMax?: number | string | null;
     selectedParamCodes?: string[];
+    mode?: "trend" | "raw";
     height?: number;
     width?: number;
   }>(),
@@ -71,6 +72,7 @@ const props = withDefaults(
     data: () => [],
     scene: "",
     legendSelected: true,
+    mode: "trend",
   },
 );
 const echartsRef: Ref<HTMLElement | null> = ref(null);
@@ -99,18 +101,29 @@ const getLegendName = (paramCode) => {
 };
 const getTimeValue = (timeStr) => dayjs(timeStr).valueOf();
 const formatTimeLabel = (value) => dayjs(value).format("YYYY-MM-DD HH:mm:ss");
+const isTrendMode = computed(() => props.mode === "trend");
+const getSeriesData = (item) => {
+  const points = (item.dataList || [])
+    .filter((point) => Number.isFinite(Number(point.value)))
+    .sort((a, b) => getTimeValue(a.timeStr) - getTimeValue(b.timeStr));
+  if (!isTrendMode.value) {
+    return points.map((point) => [new Date(point.timeStr), point.value]);
+  }
+  const values = points.map((point) => Number(point.value));
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  return points.map((point) => {
+    const value = Number(point.value);
+    const percent =
+      min === max ? 100 : ((value - min) / (max - min)) * 100;
+    return [new Date(point.timeStr), Number(percent.toFixed(2)), value];
+  });
+};
 // y轴展示格式化
 const formatYAxisLabel = (value) => `${value}`;
 const legends = computed<string[]>(() => {
   return props.data?.map((it) => getLegendName(it.paramCode));
 });
-const formatTooltipValue = (value) => {
-  if (Array.isArray(value)) {
-    const pointValue = value[1];
-    return `${pointValue}`;
-  }
-  return `${value}`;
-};
 const formatYAxis = (unit = "") => {
   const chars = unit ? Array.from(unit) : [""];
   return chars.length > 8 ? `${chars.slice(0, 10).join("")}...` : unit;
@@ -136,10 +149,14 @@ const getMarkArea = (item) => {
   };
 };
 
-const rawUnitList = computed(() => {
-  const units = Array.from(new Set(props.data.map((it) => it.paramUnit)));
-  return units.length ? units : [];
+const selectedData = computed(() => {
+  const selected = new Set(props.selectedParamCodes || []);
+  return props.data.filter((it) => selected.has(it.paramCode));
 });
+
+const rawUnitList = computed(() =>
+  selectedData.value.map((it) => it.paramUnit || ""),
+);
 
 const referenceItem = computed(() =>
   props.data.find((it) => it.paramCode === props.referenceParamCode),
@@ -169,6 +186,7 @@ const mainUnit = computed(
 );
 
 const unitList = computed(() => {
+  if (isTrendMode.value) return ["%"];
   if (!hasMainAxis.value) return rawUnitList.value;
   // 参考坐标系模式下仅保留右侧参考Y轴，其余左侧Y轴不再展示，
   // 其余参数的曲线通过 unitAxisIndexMap 回落到索引 0 共用该轴。
@@ -181,7 +199,8 @@ const displayUnitList = computed(() =>
 );
 
 const unitAxisIndexMap = computed(
-  () => new Map(unitList.value.map((unit, index) => [unit, index])),
+  () =>
+    new Map(selectedData.value.map((it, index) => [it.paramCode, index])),
 );
 
 const leftAxisCount = computed(() =>
@@ -237,21 +256,32 @@ const selectedLegend = computed(() => {
 const tooltipFormatter = (params) => {
   const paramList = Array.isArray(params) ? params : [params];
   const firstParam = paramList[0];
-  const title = firstParam?.axisValue
-    ? formatTimeLabel(firstParam.axisValue)
-    : "";
-  const content = paramList
+  const timestamp = firstParam?.axisValue ?? firstParam?.value?.[0];
+  const title = timestamp ? formatTimeLabel(timestamp) : "";
+  const rows = paramList
     .map((param) => {
-      const item = param;
-      const unit = item.seriesName
-        ? paramUnitMap.value.get(item.seriesName) || ""
+      const unit = param.seriesName
+        ? paramUnitMap.value.get(param.seriesName) || ""
         : "";
-      return `${item.marker || ""}${
-        item.seriesName || ""
-      }: ${formatTooltipValue(item.value)}${unit ? ` / ${unit}` : ""}`;
+      const value = Array.isArray(param.value) ? param.value : [];
+      const rawValue = isTrendMode.value ? value[2] : value[1];
+      const percent = isTrendMode.value
+        ? ` (${Number(value[1]).toFixed(2)}%)`
+        : "";
+      return `<div style="display:flex;align-items:center;gap:12px;margin-top:10px">
+        <span style="font-size:18px;color:${param.color || "#5b8ff9"}">●</span>
+        <span style="flex:1;font-size:15px;font-weight:600">${
+          param.seriesName || ""
+        }</span>
+        <span style="font-size:15px;font-weight:600">${rawValue}${unit}${percent}</span>
+      </div>`;
     })
-    .join("<br />");
-  return title ? `${title}<br />${content}` : content;
+    .join("");
+  return `<div style="min-width:360px;padding:2px 4px">
+    <div style="color:#7b8088;font-size:13px">${title}</div>
+    <div style="height:1px;background:#d9dde3;margin:10px 0 0"></div>
+    ${rows}
+  </div>`;
 };
 
 const calculateChartOption = () => {
@@ -277,7 +307,20 @@ const calculateChartOption = () => {
   }
   const options: ECOption = {
     color: colorArr.value,
+    graphic: [
+      {
+        type: "text",
+        left: 12,
+        top: 12,
+        style: {
+          text: isTrendMode.value ? "各参数独立归一化" : "",
+          fill: defaultAxisLabelColor,
+          font: "12px sans-serif",
+        },
+      },
+    ],
     legend: {
+      top: 36,
       data: legends.value,
       textStyle: {
         color: props.scene == "detail" ? "#000" : "#fff",
@@ -286,6 +329,12 @@ const calculateChartOption = () => {
       selected: selectedLegend.value,
     },
     tooltip: {
+      trigger: "item",
+      backgroundColor: "#fff",
+      borderColor: "#e5e7eb",
+      textStyle: { color: "#30343b" },
+      extraCssText:
+        "box-shadow:0 8px 24px rgba(0,0,0,.16);border-radius:0;padding:14px 18px;",
       axisPointer: {
         type: "cross",
       },
@@ -295,7 +344,7 @@ const calculateChartOption = () => {
       left: gridLeft.value,
       right: gridRight.value,
       bottom: "15%", // 增加底部空间以容纳缩放组件
-      top: "10%",
+      top: isTrendMode.value ? "16%" : "10%",
       containLabel: true,
     },
     xAxis: {
@@ -349,7 +398,10 @@ const calculateChartOption = () => {
           // color: unit
           //   ? defaultAxisLabelColor
           //   : noUnitColorMap.value.get(unit) || defaultAxisLabelColor,
-          formatter: (value) => formatYAxisLabel(value),
+          formatter: (value) =>
+            isTrendMode.value
+              ? `${formatYAxisLabel(value)}%`
+              : formatYAxisLabel(value),
         },
         nameTextStyle: {
           color: defaultAxisLabelColor,
@@ -409,19 +461,18 @@ const calculateChartOption = () => {
     series: seriesData?.map((it: any, index) => ({
       name: legends.value[index],
       type: "line",
-      yAxisIndex: unitAxisIndexMap.value.get(it.paramUnit) ?? 0,
+      yAxisIndex: isTrendMode.value
+        ? 0
+        : unitAxisIndexMap.value.get(it.paramCode) ?? 0,
       clip: true,
       connectNulls: false,
       // stack: "Total",
       // data: it.dataList?.map((ele) => ele.value) || [],
-      data:
-        it.dataList
-          ?.slice()
-          ?.sort((a, b) => getTimeValue(a.timeStr) - getTimeValue(b.timeStr))
-          ?.map((ele) => [new Date(ele.timeStr), ele.value]) || [],
+      data: getSeriesData(it),
       // colorBy: "data",
       markArea: getMarkArea(it),
       markLine:
+        !isTrendMode.value &&
         seriesData?.length == 1 &&
         !isNil(it.lowerLimit) &&
         !isNil(it.upperLimit)
@@ -467,7 +518,9 @@ const calculateChartOption = () => {
             : "solid",
       },
       // 上下限之外的点展示不同颜色
-      itemStyle: isUpperLine(it.paramCode)
+      itemStyle: isTrendMode.value
+        ? { color: getSeriesColor(it, index) }
+        : isUpperLine(it.paramCode)
         ? { color: upperColor }
         : isLowerLine(it.paramCode)
         ? { color: lowerColor }
@@ -496,7 +549,8 @@ const calculateChartOption = () => {
       },
     ],
     visualMap: seriesData?.map((it: any, index) => {
-      return seriesData.length === 1 &&
+      return !isTrendMode.value &&
+        seriesData.length === 1 &&
         !isNil(it.lowerLimit) &&
         !isNil(it.upperLimit)
         ? {
@@ -579,6 +633,7 @@ watch(
     () => props.mainAxisMin,
     () => props.mainAxisMax,
     () => props.selectedParamCodes,
+    () => props.mode,
   ],
   async (
     [newData, newReferenceParamCode],
