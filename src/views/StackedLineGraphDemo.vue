@@ -14,7 +14,7 @@
 </template>
 
 <script setup>
-import StackedLineGraph from '../components/StackedLineGraph.vue'
+import StackedLineGraph from '../components/echarts/stackedLineGraph.vue'
 
 const baseTime = new Date('2026-10-13 20:00:00').getTime()
 const referenceParamCode = 'main-pressure'
@@ -58,6 +58,8 @@ const selectedParamCodes = chartData.map((item) => item.paramCode)
 <style scoped>
 .stacked-line-demo {
   box-sizing: border-box;
+  height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
   padding: 24px;
   background: #f5f7fa;

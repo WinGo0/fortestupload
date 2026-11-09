@@ -1,37 +1,51 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import RecipientGroupPage from './views/RecipientGroupPage.vue'
+import MonitorPage from './views/MonitorPage.vue'
 
 // 其他演示组件暂不参与路由，需要时再取消注释：
-import RichTextEditor from './components/RichTextEditor.vue'
-// import MonitorPage from './views/MonitorPage.vue'
+// import RichTextEditor from './components/RichTextEditor.vue'
 // 旧演示页和其他页面暂不参与路由，需要时再取消注释：
-// import StackedLineGraphDemo from './views/StackedLineGraphDemo.vue'
 // import CountdownPage from './countdown/CountdownPage.vue'
 // import CountdownSettingsPage from './countdown/CountdownSettingsPage.vue'
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
+    {
+      path: '/',
+      redirect: '/monitor',
+    },
     // {
     //   path: '/',
     //   name: 'recipient-group',
     //   component: RecipientGroupPage,
     // },
-    {
-      path: '/',
-      name: 'rich-text-editor',
-      component: RichTextEditor,
-    },
+    // {
+    //   path: '/',
+    //   name: 'rich-text-editor',
+    //   component: RichTextEditor,
+    // },
     // {
     //   path: '/monitor',
     //   name: 'monitor-page',
     //   component: MonitorPage,
     // },
-    // {
-    //   path: '/stacked-line-graph',
-    //   name: 'stacked-line-graph',
-    //   component: StackedLineGraphDemo,
-    // },
+    {
+      path: '/monitor',
+      name: 'monitor-page',
+      component: MonitorPage,
+    },
+    {
+      path: '/stacked-line-graph',
+      redirect: '/monitor',
+    },
+    /*
+    {
+      path: '/stacked-line-graph',
+      name: 'stacked-line-graph',
+      component: StackedLineGraphDemo,
+    },
+    */
     // {
     //   path: '/',
     //   name: 'countdown',

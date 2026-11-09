@@ -915,7 +915,7 @@ onMounted(async () => {
 
     .system-list {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
       gap: 15px;
       justify-content: start;
       max-height: 35vh;
@@ -924,9 +924,12 @@ onMounted(async () => {
 
       .mosaic-box {
         display: flex;
+        min-width: 0;
         height: 45px;
         align-items: center;
         justify-content: center;
+        padding: 4px 8px;
+        box-sizing: border-box;
         font-size: 14px;
         color: #fff;
         cursor: pointer;
@@ -962,11 +965,17 @@ onMounted(async () => {
 
       .system-desc {
         display: flex;
+        min-width: 0;
+        max-width: 100%;
         flex-direction: column;
         text-align: center;
 
         .main-desc {
           font-size: 14px;
+          max-width: 100%;
+          overflow: hidden;
+          white-space: nowrap;
+          text-overflow: ellipsis;
         }
 
         .vice-desc {
