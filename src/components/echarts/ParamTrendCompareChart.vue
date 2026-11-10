@@ -320,7 +320,7 @@ const calculateChartOption = () => {
       },
     ],
     legend: {
-      top: 36,
+      top: 24,
       data: legends.value,
       textStyle: {
         color: props.scene == "detail" ? "#000" : "#fff",
